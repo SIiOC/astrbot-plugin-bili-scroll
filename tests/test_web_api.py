@@ -390,10 +390,16 @@ class WebApiTestCase(unittest.TestCase):
                 "keywords": "甲,乙，丙",
                 "auto_run": True,
                 "llm_budget_per_day": 999999,
+                "dm_share_mode": "single",
+                "dm_share_limit": 3,
+                "dm_share_daily_limit": 10,
+                "dm_share_interval": 5,
             },
         )
         self.assertIn("per_day", result["applied"])
         self.assertIn("keywords", result["applied"])
+        self.assertIn("dm_share_mode", result["applied"])
+        self.assertEqual(self.plugin.cfg["dm_share_limit"], 3)
         self.assertTrue(self.plugin.cfg["auto_run"])
         self.assertEqual(
             self.plugin.cfg["keywords"], ["甲:34", "乙:33", "丙:33"]
@@ -402,11 +408,12 @@ class WebApiTestCase(unittest.TestCase):
 
     def test_apply_config_updates_rejects_bad_values(self):
         bad = web_api.apply_config_updates(
-            self.plugin, {"dm_mode": "nope", "run_at": "25:99", "debug": True}
+            self.plugin, {"dm_mode": "nope", "dm_share_mode": "nope", "run_at": "25:99", "debug": True}
         )
         self.assertFalse(bad["ok"])
         joined = " ".join(bad["issues"])
         self.assertIn("dm_mode", joined)
+        self.assertIn("dm_share_mode", joined)
         self.assertIn("run_at", joined)
         self.assertIn("debug", joined)
 

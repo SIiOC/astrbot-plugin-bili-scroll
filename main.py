@@ -1508,6 +1508,10 @@ class BiliScrollPlugin(Star):
         mode = str(self._cfg("dm_mode", "off") or "off").strip().lower()
         return mode if mode in ("off", "only", "both") else "off"
 
+    def _dm_share_mode(self) -> str:
+        mode = str(self._cfg("dm_share_mode", "single") or "single").strip().lower()
+        return mode if mode in ("digest", "single") else "single"
+
     async def _deliver(
         self,
         umo: str,
@@ -1520,7 +1524,10 @@ class BiliScrollPlugin(Star):
         """按 dm_mode 投递：off=只推聊天；only=只发 B 站私信；both=两边都发。"""
         mode = self._dm_mode()
         if picked and mode in ("only", "both"):
-            await self._send_dm(picked)
+            if self._dm_share_mode() == "single":
+                await self._send_dm_single(picked)
+            else:
+                await self._send_dm(picked)
         if mode != "only":
             pushed = await self._push_report(umo, report, picked, skipped, examined, level)
             if pushed:
@@ -1546,6 +1553,105 @@ class BiliScrollPlugin(Star):
             extra={"text": text},
         )
         return True
+
+    async def _send_dm_single(self, picked: list[dict]) -> int:
+        """逐条分享：每条一个纯文本私信，带标题/UP/一句话/BV 链接。
+
+        防重复与防刷屏：当天已分享的 BV 跳过；每轮最多 dm_share_limit 条、
+        每天最多 dm_share_daily_limit 条；两条之间间隔 dm_share_interval 秒。
+        私信是写操作，失败不重试（避免重复发送）。
+        """
+        if not picked:
+            return 0
+        limit = self._cfg_int("dm_text_limit", 500, minimum=100)
+        per_round = self._cfg_int("dm_share_limit", 3, minimum=1)
+        daily_limit = self._cfg_int("dm_share_daily_limit", 10, minimum=1)
+        interval = self._cfg_int("dm_share_interval", 5, minimum=2)
+        receiver = self._cfg_int("dm_uid", 0)
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        state = self.store.load_state()
+        shared_map = state.get("dm_shared")
+        shared_map = shared_map if isinstance(shared_map, dict) else {}
+        shared = [str(x) for x in (shared_map.get(today) or []) if str(x).strip()]
+        remaining = max(0, daily_limit - len(shared))
+        if remaining <= 0:
+            self.logger.info(
+                "[bili-scroll] B站私信逐条分享：今天已达上限 %s 条，跳过", daily_limit
+            )
+            return 0
+        selected = logic.select_dm_share_items(picked, shared, min(per_round, remaining))
+        if not selected:
+            self.logger.info(
+                "[bili-scroll] B站私信逐条分享：本轮没有新视频（当天已发 %s/%s 条）",
+                len(shared),
+                daily_limit,
+            )
+            return 0
+
+        sent = 0
+        for idx, item in enumerate(selected):
+            bvid = str(item.get("bvid") or "").strip()
+            if not bvid:
+                continue
+            card_item = item
+            # 搜索流可能没有 aid/封面；补一次详情，卡片才能显示封面和标题。
+            if not item.get("aid") or not item.get("cover"):
+                try:
+                    card_item = {**item, **await self.client.video_detail(item)}
+                except Exception as exc:  # noqa: BLE001
+                    self.logger.debug("[bili-scroll] 分享卡片补详情失败（%s）：%s", bvid, exc)
+
+            share_kind = "card"
+            card_unsupported = bool(getattr(self, "_dm_card_unsupported", False))
+            if not card_unsupported:
+                try:
+                    await self.client.send_share_dm(card_item, receiver_uid=receiver)
+                except Exception as card_exc:  # noqa: BLE001
+                    # B站 web 私信接口实测只接受 1/2/5，卡片会被 -400 拒绝；
+                    # 记住一次，后续直接走文字，避免每条都发一次无效写请求。
+                    self._dm_card_unsupported = True
+                    card_unsupported = True
+                    self.logger.info(
+                        "[bili-scroll] 分享卡片发送失败（%s），后续改发文字：%s",
+                        bvid,
+                        card_exc,
+                    )
+
+            if card_unsupported:
+                # 退回自然口吻文字，不再用固定模板。
+                fallback = logic.build_dm_share_fallback_text(card_item, limit=limit)
+                if not fallback:
+                    continue
+                try:
+                    await self.client.send_dm(fallback, receiver_uid=receiver)
+                except Exception as exc:  # noqa: BLE001
+                    self.logger.warning(
+                        "[bili-scroll] B站私信逐条分享失败（%s）：%s", bvid, exc
+                    )
+                    # 只提示一次，避免一轮刷多条错误消息；push_qq 关闭时只写日志。
+                    await self._push(self._umo or "", f"B站私信分享失败：{exc}")
+                    break
+                share_kind = "text"
+
+            shared.append(bvid)
+            sent += 1
+            self._record_sent(
+                "dm",
+                f"bili:{receiver or self.client.own_uid()}",
+                [item],
+                extra={"share": share_kind},
+            )
+            # 每条都落盘，进程中断后下轮不会重复分享同一 BV。
+            state = self.store.load_state()
+            state["dm_shared"] = {today: shared[-50:]}
+            self.store.save_state(state)
+            if idx < len(selected) - 1:
+                await asyncio.sleep(interval)
+
+        if sent:
+            self.logger.info("[bili-scroll] B站私信逐条分享：本轮发送 %s 条", sent)
+        return sent
 
     def _record_sent(self, kind: str, target: str, picked: list[dict], extra: dict | None = None) -> None:
         """把「发过什么」落到 sent.jsonl，供注入上下文与工具查询。"""

@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 import urllib.parse
@@ -22,6 +23,7 @@ import qrcode
 from bilibili_api import Credential, comment, homepage, hot, search, session as bili_session, user, video
 from bilibili_api.comment import CommentResourceType
 from bilibili_api.search import SearchObjectType
+from bilibili_api.utils.network import Api
 
 from . import logic, vision
 from .store import Store
@@ -266,6 +268,63 @@ class BiliClient:
             raise BiliError(f"发送私信失败（code={code}）：{payload.get('message') or ''}")
         return payload or {"code": 0}
 
+    async def send_share_dm(self, item: dict, receiver_uid: int = 0) -> dict:
+        """给指定 UID 发一条 B 站原生视频分享卡片（msg_type=7 / source=5）。
+
+        说明：web 端 send_msg 文档只承诺支持 1/2/5，分享卡片可能被服务端拒绝；
+        调用方应捕获 BiliError 后退回自然文字私信。
+        """
+        uid = int(receiver_uid or 0) or self.own_uid()
+        if not uid:
+            raise BiliError("无法确定私信接收者：凭据里没有 dedeuserid")
+        if uid == self.own_uid():
+            raise BiliError(
+                "B站不允许给自己发私信（21026）；请把 dm_uid 设为另一个账号的 UID。"
+            )
+        if not self.has_credential():
+            raise NotLoggedInError("未登录，先扫码")
+        card = logic.build_dm_share_card(item)
+        if not card:
+            raise BiliError("分享卡片缺少 aid/bvid")
+        sender_uid = self.own_uid()
+        if not sender_uid:
+            raise BiliError("无法确定发送者 UID：凭据里没有 dedeuserid")
+
+        api = bili_session.API["operate"]["send_msg"]
+        data = {
+            "msg[sender_uid]": sender_uid,
+            "msg[receiver_id]": uid,
+            "msg[receiver_type]": 1,
+            "msg[msg_type]": 7,
+            "msg[msg_status]": 0,
+            "msg[content]": json.dumps(card, ensure_ascii=False),
+            "msg[dev_id]": str(uuid.uuid4()).upper(),
+            "msg[new_face_version]": 0,
+            "msg[timestamp]": int(time.time()),
+            "from_filework": 0,
+            "build": 0,
+            "mobi_app": "web",
+        }
+        query = {"w_sender_uid": sender_uid, "w_receiver_id": uid}
+        try:
+            # 分享卡片是写操作：绝不重试，避免同一卡片发多次。
+            self._bump()
+            result = await (
+                Api(**api, credential=self.credential)
+                .update_params(**query)
+                .update_data(**data)
+                .result
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise BiliError(f"发送分享卡片失败：{exc}") from exc
+        payload = result if isinstance(result, dict) else {}
+        code = payload.get("code")
+        if code not in (None, 0):
+            raise BiliError(
+                f"发送分享卡片失败（code={code}）：{payload.get('message') or ''}"
+            )
+        return payload or {"code": 0}
+
     async def _fetch_buvid(self, session: aiohttp.ClientSession) -> dict:
         try:
             async with session.get(FINGER_SPI, headers=HEADERS) as resp:
@@ -377,6 +436,7 @@ class BiliClient:
                 cid = pages[0].get("cid")  # 多 P 视频顶层 cid 可能缺
         detail["cid"] = int(cid) if cid else None
         detail["title"] = str(info.get("title") or item.get("title") or "")
+        detail["cover"] = str(info.get("pic") or item.get("cover") or "")
         detail["up"] = str((info.get("owner") or {}).get("name") or item.get("up") or "")
         desc = str(info.get("desc") or "").strip()
         if desc:

@@ -311,6 +311,34 @@
     "default": 500,
     "hint": "B 站私信过长会报 21007，建议 ≤500。超出会先去掉理由、再截断。"
   },
+  "dm_share_mode": {
+    "description": "私信分享方式",
+    "type": "string",
+    "options": [
+      "single",
+      "digest"
+    ],
+    "default": "single",
+    "hint": "single=每条视频发一条 B 站原生分享卡片，接口不支持时自动退回自然文字+链接；digest=所有视频汇总成一条（旧行为）。仅 dm_mode 不为 off 时生效。"
+  },
+  "dm_share_limit": {
+    "description": "每轮逐条分享上限",
+    "type": "int",
+    "default": 3,
+    "hint": "每轮最多逐条发几条私信，建议 1–3，避免 B 站风控。"
+  },
+  "dm_share_daily_limit": {
+    "description": "逐条私信每日上限",
+    "type": "int",
+    "default": 10,
+    "hint": "跨轮累计的每日上限；达到后不再逐条分享。"
+  },
+  "dm_share_interval": {
+    "description": "逐条私信间隔（秒）",
+    "type": "int",
+    "default": 5,
+    "hint": "两条私信之间至少等待的秒数，建议 5–10 秒。"
+  },
   "inject_sent_context": {
     "description": "让 bot 记得发过什么",
     "type": "bool",

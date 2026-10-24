@@ -342,6 +342,54 @@ class TestReport(unittest.TestCase):
         text = logic.build_dm_text("2026-10-20", picked, limit=150)
         self.assertLessEqual(len(text), 150)
 
+    def test_build_dm_share_text_keeps_url(self):
+        item = {
+            "bvid": "BV1NXH661EpG",
+            "title": "标题" * 40,
+            "url": "https://www.bilibili.com/video/BV1NXH661EpG",
+            "up": "UP主",
+            "one_liner": "理由" * 40,
+        }
+        text = logic.build_dm_share_text(item, limit=120)
+        self.assertLessEqual(len(text), 120)
+        self.assertIn(item["url"], text)
+        self.assertIn("B站分享", text)
+        self.assertEqual(logic.build_dm_share_text({"bvid": "", "url": ""}), "")
+
+    def test_set_dm_share_card_and_fallback(self):
+        item = {
+            "bvid": "BV1NXH661EpG",
+            "aid": 123456,
+            "title": "标题一",
+            "up": "UP主",
+            "cover": "https://i0.hdslb.com/a.jpg",
+            "url": "https://www.bilibili.com/video/BV1NXH661EpG",
+            "one_liner": "这个真挺适合你的",
+        }
+        card = logic.build_dm_share_card(item)
+        self.assertEqual(card["bvid"], item["bvid"])
+        self.assertEqual(card["id"], 123456)
+        self.assertEqual(card["source"], 5)
+        self.assertEqual(card["thumb"], item["cover"])
+        self.assertEqual(logic.build_dm_share_card({"bvid": "BV1"}), {})
+        fallback = logic.build_dm_share_fallback_text(item)
+        self.assertIn(item["url"], fallback)
+        self.assertIn("这个真挺适合你的", fallback)
+        self.assertNotIn("【B站分享】", fallback)
+
+    def test_select_dm_share_items_skips_shared_and_limits(self):
+        picked = [
+            {"bvid": "BV1", "title": "一"},
+            {"bvid": "BV2", "title": "二"},
+            {"bvid": "BV3", "title": "三"},
+            {"bvid": "BV1", "title": "重复"},
+            {"bvid": "", "title": "无 BV"},
+        ]
+        chosen = logic.select_dm_share_items(picked, ["BV2"], limit=1)
+        self.assertEqual([item["bvid"] for item in chosen], ["BV1"])
+        chosen = logic.select_dm_share_items(picked, ["BV2"], limit=5)
+        self.assertEqual([item["bvid"] for item in chosen], ["BV1", "BV3"])
+
     def test_sent_entry_lines(self):
         entries = [
             {

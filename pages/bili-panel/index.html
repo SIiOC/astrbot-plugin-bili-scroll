@@ -283,6 +283,19 @@
           <label>自动运行时间<input id="cfgRunAt" placeholder="22:00" /></label>
           <label>要 @ 的昵称<input id="cfgMention" /></label>
           <label>评论字数上限<input id="cfgCommentLimit" type="number" min="20" max="150" /></label>
+          <label>日报投递<select id="cfgDmMode">
+            <option value="off">关闭（只推聊天）</option>
+            <option value="only">只发 B 站私信</option>
+            <option value="both">聊天 + B 站私信</option>
+          </select></label>
+          <label>私信分享方式<select id="cfgDmShareMode">
+            <option value="single">逐条分享卡片（失败转文字）</option>
+            <option value="digest">汇总一条（旧行为）</option>
+          </select></label>
+          <label>私信接收 UID<input id="cfgDmUid" type="number" min="0" placeholder="另一个账号的 UID" /></label>
+          <label>每轮私信上限<input id="cfgDmShareLimit" type="number" min="1" max="10" /></label>
+          <label>每日私信上限<input id="cfgDmShareDaily" type="number" min="1" max="50" /></label>
+          <label>私信间隔(秒)<input id="cfgDmShareInterval" type="number" min="2" max="60" /></label>
           <label>无字幕视频<select id="cfgNoSubtitlePolicy">
             <option value="skip">跳过（默认）</option>
             <option value="summary">用 AI 摘要判断</option>
@@ -934,6 +947,10 @@
             cfgRunAt: c.run_at,
             cfgMention: c.mention_name,
             cfgCommentLimit: c.comment_text_limit,
+            cfgDmUid: c.dm_uid,
+            cfgDmShareLimit: c.dm_share_limit,
+            cfgDmShareDaily: c.dm_share_daily_limit,
+            cfgDmShareInterval: c.dm_share_interval,
             cfgVisionFrames: c.vision_max_frames,
             cfgVisionSeconds: c.vision_max_seconds,
             cfgPreferenceWeight: c.preference_weight,
@@ -954,6 +971,12 @@
           }
           if (document.activeElement !== $("cfgNoSubtitlePolicy")) {
             $("cfgNoSubtitlePolicy").value = c.no_subtitle_policy || "skip";
+          }
+          if (document.activeElement !== $("cfgDmMode")) {
+            $("cfgDmMode").value = c.dm_mode || "off";
+          }
+          if (document.activeElement !== $("cfgDmShareMode")) {
+            $("cfgDmShareMode").value = c.dm_share_mode || "single";
           }
           applyMixValues(
             c.mix_keywords_pct === undefined ? 100 : c.mix_keywords_pct,
@@ -991,6 +1014,12 @@
             run_at: $("cfgRunAt").value.trim(),
             mention_name: $("cfgMention").value.trim(),
             comment_text_limit: Number($("cfgCommentLimit").value || 150),
+            dm_mode: $("cfgDmMode").value,
+            dm_share_mode: $("cfgDmShareMode").value,
+            dm_uid: Number($("cfgDmUid").value || 0),
+            dm_share_limit: Number($("cfgDmShareLimit").value || 3),
+            dm_share_daily_limit: Number($("cfgDmShareDaily").value || 10),
+            dm_share_interval: Number($("cfgDmShareInterval").value || 5),
             no_subtitle_policy: $("cfgNoSubtitlePolicy").value,
             vision_max_frames: Number($("cfgVisionFrames").value || 5),
             vision_max_seconds: Number($("cfgVisionSeconds").value || 120),
@@ -1062,7 +1091,7 @@
           });
           document
             .querySelectorAll(
-              "#cfgPerDay,#cfgLlm,#cfgRounds,#cfgMaxCandidates,#cfgRunAt,#cfgMention,#cfgCommentLimit,#cfgCommentBlocklist,#cfgNoSubtitlePolicy,#cfgVisionFrames,#cfgVisionSeconds,#cfgPreferenceWeight,#cfgPickThreshold,#cfgRiskThreshold,#cfgProactiveIdle,#cfgProactiveMax,#cfgProactiveGap,#cfgMixKeywords,#cfgMixRecommend,#cfgMixPopular,#cfgAutoRun,#cfgNlTrigger,#cfgPeak,#cfgAutoComment,#cfgPushQQ,#cfgPersona,#cfgCommentGuard,#cfgReadComments,#cfgProactiveShare"
+              "#cfgPerDay,#cfgLlm,#cfgRounds,#cfgMaxCandidates,#cfgRunAt,#cfgMention,#cfgCommentLimit,#cfgCommentBlocklist,#cfgNoSubtitlePolicy,#cfgDmMode,#cfgDmShareMode,#cfgDmUid,#cfgDmShareLimit,#cfgDmShareDaily,#cfgDmShareInterval,#cfgVisionFrames,#cfgVisionSeconds,#cfgPreferenceWeight,#cfgPickThreshold,#cfgRiskThreshold,#cfgProactiveIdle,#cfgProactiveMax,#cfgProactiveGap,#cfgMixKeywords,#cfgMixRecommend,#cfgMixPopular,#cfgAutoRun,#cfgNlTrigger,#cfgPeak,#cfgAutoComment,#cfgPushQQ,#cfgPersona,#cfgCommentGuard,#cfgReadComments,#cfgProactiveShare"
             )
             .forEach((el) => {
               el.addEventListener("input", () => {

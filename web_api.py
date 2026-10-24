@@ -64,6 +64,9 @@ _INT_KEYS: dict[str, tuple[int, int]] = {
     "sent_context_days": (1, 30),
     "dm_uid": (0, 10**12),
     "dm_text_limit": (100, 500),
+    "dm_share_limit": (1, 10),
+    "dm_share_daily_limit": (1, 50),
+    "dm_share_interval": (2, 60),
     "proactive_idle_minutes": (5, 1440),
     "proactive_max_per_day": (0, 10),
     "proactive_min_gap_minutes": (0, 1440),
@@ -83,6 +86,7 @@ _STR_KEYS = {
     "comment_persona_hint",
     "comment_blocklist",
     "dm_mode",
+    "dm_share_mode",
     "proactive_quiet_start",
     "proactive_quiet_end",
     "proactive_source",
@@ -91,6 +95,7 @@ _STR_KEYS = {
     "ffmpeg_path",
 }
 _DM_MODES = {"off", "only", "both"}
+_DM_SHARE_MODES = {"single", "digest"}
 _NO_SUBTITLE_POLICIES = {"skip", "summary", "comments", "vision"}
 
 
@@ -159,6 +164,9 @@ def apply_config_updates(plugin, payload: dict) -> dict:
             text = str(value or "").strip()
             if key == "dm_mode" and text not in _DM_MODES:
                 issues.append("dm_mode: 只能是 off / only / both")
+                continue
+            if key == "dm_share_mode" and text not in _DM_SHARE_MODES:
+                issues.append("dm_share_mode: 只能是 single / digest")
                 continue
             if key == "no_subtitle_policy" and text not in _NO_SUBTITLE_POLICIES:
                 issues.append("no_subtitle_policy: 只能是 skip / summary / comments / vision")
@@ -336,6 +344,12 @@ class BiliScrollWebAPI:
             "report_chars": len(report_text),
             "data_dir": str(plugin.store.data_dir),
             "dm_mode": str(plugin._cfg("dm_mode", "off") or "off"),
+            "dm_share_mode": str(plugin._cfg("dm_share_mode", "single") or "single"),
+            "dm_share_limit": plugin._cfg_int("dm_share_limit", 3, minimum=1),
+            "dm_share_daily_limit": plugin._cfg_int(
+                "dm_share_daily_limit", 10, minimum=1
+            ),
+            "dm_share_interval": plugin._cfg_int("dm_share_interval", 5, minimum=2),
             "dm_uid": plugin._cfg_int("dm_uid", 0),
             "dm_text_limit": plugin._cfg_int("dm_text_limit", 500, minimum=100),
             "sent_today": sent_today,
@@ -426,6 +440,16 @@ class BiliScrollWebAPI:
                 ),
                 "push_qq": bool(plugin._cfg("push_qq", True)),
                 "dm_mode": str(plugin._cfg("dm_mode", "off") or "off"),
+                "dm_share_mode": str(plugin._cfg("dm_share_mode", "single") or "single"),
+                "dm_share_limit": plugin._cfg_int("dm_share_limit", 3, minimum=1),
+                "dm_share_daily_limit": plugin._cfg_int(
+                    "dm_share_daily_limit", 10, minimum=1
+                ),
+                "dm_share_interval": plugin._cfg_int(
+                    "dm_share_interval", 5, minimum=2
+                ),
+                "dm_uid": plugin._cfg_int("dm_uid", 0),
+                "dm_text_limit": plugin._cfg_int("dm_text_limit", 500, minimum=100),
                 "llm_budget_per_day": plugin._cfg_int("llm_budget_per_day", 200),
                 "rounds_per_day": plugin._cfg_int("rounds_per_day", 12),
                 "risk_abort_threshold": plugin._cfg_int(

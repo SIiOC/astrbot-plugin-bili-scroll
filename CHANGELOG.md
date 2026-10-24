@@ -2,6 +2,18 @@
 
 本项目遵循语义化版本（`MAJOR.MINOR.PATCH`）。版本号在 `metadata.yaml` 中维护。
 
+## 0.13.0 — 2026-10-24
+
+### 新增
+
+- B 站私信支持**逐条分享**：`dm_share_mode=single`（默认）时，每条挑中的视频单独发一条私信，优先使用 B 站原生视频分享卡片（`msg_type=7`，标题/封面/UP/跳转）
+- web 端接口若拒绝分享卡片，自动退回自然口吻文字（理由 + 标题 + BV 链接），不再使用 `【B站分享】` 固定模板
+- 实测 B 站 web `send_msg` 拒绝 `msg_type=7`（返回 `-400`）；首条失败后会缓存「卡片不可用」，后续直接发文字，避免每条都产生一次无效写请求
+- 逐条分享的防刷屏保护：跳过当天已分享的 BV；每轮最多 `dm_share_limit` 条、每天最多 `dm_share_daily_limit` 条、两条之间间隔 `dm_share_interval` 秒；发送失败不重试
+- 原汇总私信保留：`dm_share_mode=digest` 为旧行为
+- 控制台新增日报投递、私信分享方式、接收 UID、每轮/每日上限、间隔设置
+- 新增 `build_dm_share_text` / `select_dm_share_items` 单测
+
 ## 0.12.2 — 2026-10-24
 
 ### 修复

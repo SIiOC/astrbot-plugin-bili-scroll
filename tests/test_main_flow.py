@@ -84,6 +84,8 @@ class FakeClient:
         self.verdicts = verdicts
         self.posted = []
         self.dms = []
+        self.share_dms = []
+        self.share_error = ""
         self.home_feed_items = []
         self.search_limits = []
         self.visible = True
@@ -135,6 +137,12 @@ class FakeClient:
 
     async def send_dm(self, text, receiver_uid=0):
         self.dms.append((receiver_uid, text))
+        return {"code": 0}
+
+    async def send_share_dm(self, item, receiver_uid=0):
+        if self.share_error:
+            raise RuntimeError(self.share_error)
+        self.share_dms.append((receiver_uid, item))
         return {"code": 0}
 
     async def comment_visible(self, item, rpid):
@@ -452,7 +460,7 @@ class TestRoundFlow(unittest.TestCase):
     def test_dm_only_skips_chat_push(self):
         item = make_item("BV1NXH661EpG", "值得看的")
         plugin, client = self._plugin([item], {item["bvid"]: "字幕" * 20})
-        plugin.cfg["dm_mode"] = "only"
+        plugin.cfg.update({"dm_mode": "only", "dm_share_mode": "digest"})
         asyncio.run(plugin._run_round("test:FriendMessage:1"))
         self.assertEqual(len(client.dms), 1)
         self.assertIn("值得看的", client.dms[0][1])
@@ -464,7 +472,7 @@ class TestRoundFlow(unittest.TestCase):
     def test_dm_both_sends_dm_and_chat(self):
         item = make_item("BV1NXH661EpG", "值得看的")
         plugin, client = self._plugin([item], {item["bvid"]: "字幕" * 20})
-        plugin.cfg["dm_mode"] = "both"
+        plugin.cfg.update({"dm_mode": "both", "dm_share_mode": "digest"})
         asyncio.run(plugin._run_round("test:FriendMessage:1"))
         self.assertEqual(len(client.dms), 1)
         self.assertTrue(plugin.context.sent)  # 聊天也推了
@@ -475,10 +483,67 @@ class TestRoundFlow(unittest.TestCase):
     def test_dm_text_respects_limit(self):
         item = make_item("BV1NXH661EpG", "标题" * 60)
         plugin, client = self._plugin([item], {item["bvid"]: "字幕" * 20})
-        plugin.cfg.update({"dm_mode": "only", "dm_text_limit": 120})
+        plugin.cfg.update(
+            {"dm_mode": "only", "dm_share_mode": "digest", "dm_text_limit": 120}
+        )
         asyncio.run(plugin._run_round("test:FriendMessage:1"))
         self.assertEqual(len(client.dms), 1)
         self.assertLessEqual(len(client.dms[0][1]), 120)
+
+    def test_dm_single_sends_each_and_records(self):
+        items = [
+            make_item("BV1NXH661E01", "视频一"),
+            make_item("BV1NXH661E02", "视频二"),
+            make_item("BV1NXH661E03", "视频三"),
+        ]
+        plugin, client = self._plugin(items, {item["bvid"]: "字幕" * 20 for item in items})
+        plugin.cfg.update(
+            {
+                "dm_mode": "only",
+                "dm_share_mode": "single",
+                "dm_share_limit": 2,
+                "dm_share_daily_limit": 5,
+                "dm_share_interval": 2,
+            }
+        )
+        asyncio.run(plugin._run_round("test:FriendMessage:1"))
+        self.assertEqual(len(client.share_dms), 2)
+        self.assertEqual(client.share_dms[0][1]["bvid"], items[0]["bvid"])
+        self.assertEqual(client.share_dms[1][1]["bvid"], items[1]["bvid"])
+        state = plugin.store.load_state()
+        self.assertEqual(len(state["dm_shared"]), 1)
+        self.assertEqual(len(list(state["dm_shared"].values())[0]), 2)
+        kinds = [entry["kind"] for entry in plugin.store.recent_sent()]
+        self.assertEqual(kinds.count("dm"), 2)
+        self.assertNotIn("push", kinds)
+
+    def test_dm_single_falls_back_to_natural_text(self):
+        item = make_item("BV1NXH661EpG", "值得看的")
+        plugin, client = self._plugin([item], {item["bvid"]: "字幕" * 20})
+        client.share_error = "分享卡片暂不支持"
+        plugin.cfg.update(
+            {
+                "dm_mode": "only",
+                "dm_share_mode": "single",
+                "dm_share_limit": 1,
+                "dm_share_daily_limit": 5,
+            }
+        )
+        asyncio.run(plugin._run_round("test:FriendMessage:1"))
+        self.assertEqual(len(client.share_dms), 0)
+        self.assertEqual(len(client.dms), 1)
+        fallback = client.dms[0][1]
+        self.assertIn(item["url"], fallback)
+        self.assertNotIn("【B站分享】", fallback)
+        self.assertNotIn("B站日报", fallback)
+
+    def test_dm_digest_mode_still_sends_one_message(self):
+        items = [make_item("BV1NXH661E01", "视频一"), make_item("BV1NXH661E02", "视频二")]
+        plugin, client = self._plugin(items, {item["bvid"]: "字幕" * 20 for item in items})
+        plugin.cfg.update({"dm_mode": "only", "dm_share_mode": "digest"})
+        asyncio.run(plugin._run_round("test:FriendMessage:1"))
+        self.assertEqual(len(client.dms), 1)
+        self.assertIn("B站日报", client.dms[0][1])
 
     def test_push_qq_off_keeps_report_local(self):
         item = make_item("BV1NXH661EpG", "值得看的")

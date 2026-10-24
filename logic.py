@@ -66,6 +66,7 @@ def normalize_search_item(raw: dict) -> dict | None:
         "duration": parse_duration(raw.get("duration")),
         "play": int(raw.get("play") or 0),
         "desc": strip_em(raw.get("description")),
+        "cover": str(raw.get("pic") or ""),
         "url": f"https://www.bilibili.com/video/{bvid}",
     }
 
@@ -92,6 +93,7 @@ def normalize_homepage_item(raw: dict) -> dict | None:
         "duration": int(raw.get("duration") or 0),
         "play": int(stat.get("view") or 0),
         "desc": "",
+        "cover": str(raw.get("pic") or ""),
         "url": f"https://www.bilibili.com/video/{bvid}",
         "reason": strip_em(reason.get("content") if isinstance(reason, dict) else ""),
         "source": "recommend",
@@ -116,6 +118,7 @@ def normalize_hot_item(raw: dict) -> dict | None:
         "duration": int(raw.get("duration") or 0),
         "play": int(stat.get("view") or 0),
         "desc": "",
+        "cover": str(raw.get("pic") or ""),
         "url": f"https://www.bilibili.com/video/{bvid}",
         "source": "popular",
     }
@@ -803,6 +806,96 @@ def build_dm_text(date_str: str, picked: list[dict], limit: int = 500) -> str:
     if len(compact) <= limit:
         return compact
     return compact[: limit - 1].rstrip() + "…"
+
+
+def select_dm_share_items(picked: list[dict], already: list[str], limit: int) -> list[dict]:
+    """挑出本轮要逐条私信分享的视频：跳过无效/当天已发，最多 limit 条。"""
+    chosen: list[dict] = []
+    seen = {str(x or "").strip() for x in (already or [])}
+    for item in picked or []:
+        bvid = str(item.get("bvid") or "").strip()
+        if not bvid or bvid in seen:
+            continue
+        chosen.append(item)
+        seen.add(bvid)
+        if len(chosen) >= max(1, int(limit or 1)):
+            break
+    return chosen
+
+
+def build_dm_share_text(item: dict, limit: int = 500) -> str:
+    """把单条视频压成一条 B 站私信：标题 + UP/一句话 + BV 链接，保留链接不截断。"""
+    url = str(item.get("url") or "").strip()
+    if not url:
+        bvid = str(item.get("bvid") or "").strip()
+        url = f"https://www.bilibili.com/video/{bvid}" if bvid else ""
+    if not url:
+        return ""
+    limit = max(100, int(limit or 500))
+    prefix = "【B站分享】"
+    title = _clip(item.get("title", ""), 80) or "B站视频"
+    up = _clip(item.get("up", ""), 20)
+    reason = _clip(item.get("one_liner", ""), 80)
+
+    lines = [prefix + title]
+    if up:
+        lines.append(f"UP：{up}")
+    if reason:
+        lines.append(reason)
+    lines.append(url)
+    text = "\n".join(lines)
+    if len(text) <= limit:
+        return text
+
+    # 超长时先丢 UP/理由，只保留标题和链接；仍超长则截标题，但绝不让链接被截断。
+    fixed = f"{prefix}{title}\n{url}"
+    if len(fixed) <= limit:
+        return fixed
+    budget = max(1, limit - len(prefix) - len(url) - 1)
+    return f"{prefix}{title[:budget]}\n{url}"
+
+
+def build_dm_share_card(item: dict) -> dict:
+    """构造 B 站私信原生视频分享卡片（msg_type=7，source=5）。"""
+    aid = item.get("aid")
+    bvid = str(item.get("bvid") or "").strip()
+    if not aid or not bvid:
+        return {}
+    card = {
+        "author": str(item.get("up") or ""),
+        "headline": "",
+        "id": int(aid),
+        "source": 5,
+        "thumb": str(item.get("cover") or ""),
+        "title": str(item.get("title") or ""),
+        "bvid": bvid,
+    }
+    url = str(item.get("url") or "").strip()
+    if url:
+        card["url"] = url
+    return card
+
+
+def build_dm_share_fallback_text(item: dict, limit: int = 500) -> str:
+    """原生卡片发不出去时的自然口吻文字兜底（不用固定标题模板）。"""
+    url = str(item.get("url") or "").strip()
+    if not url:
+        bvid = str(item.get("bvid") or "").strip()
+        url = f"https://www.bilibili.com/video/{bvid}" if bvid else ""
+    if not url:
+        return ""
+    limit = max(100, int(limit or 500))
+    title = _clip(item.get("title", ""), 60) or "B站视频"
+    reason = _clip(item.get("one_liner") or item.get("reason") or "", 80)
+    if reason:
+        text = f"{reason}\n《{title}》\n{url}"
+    else:
+        text = f"看到《{title}》，感觉挺适合你\n{url}"
+    if len(text) <= limit:
+        return text
+    # 保留链接，压缩标题/理由。
+    fixed = f"看到《{_clip(title, 30)}》，感觉挺适合你\n{url}"
+    return fixed if len(fixed) <= limit else f"{fixed[: max(0, limit - len(url) - 1)]}\n{url}"
 
 
 def sent_entry_line(entry: dict) -> str:
