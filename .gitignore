@@ -1,0 +1,33 @@
+# 本项目为 AstrBot 插件源码仓库；发布产物不包含本地运行数据
+data/
+state.json
+bili_credential.json
+sent.jsonl
+seen.md
+out/
+digest/
+verdict_cache.json
+qrcode_login.png
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 发布产物与本地备份
+release/
+dist/
+*.zip
+*.log
+backups/
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,338 @@
+{
+  "auto_run": {
+    "description": "每日自动刷一轮",
+    "type": "bool",
+    "default": false,
+    "hint": "打开后按「自动运行时间」每天跑一次。需要宿主平台支持主动消息；日报会推送到最近一次 /bili_scroll 登记的会话。"
+  },
+  "run_at": {
+    "description": "自动运行时间",
+    "type": "string",
+    "default": "22:00",
+    "hint": "24 小时制 HH:MM。到点后若今天还没跑过就开跑；错过时间不会补跑。"
+  },
+  "nl_trigger": {
+    "description": "允许自然语言触发",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后管理员发「你去刷会视频吧」「帮我刷会儿视频」这类命令式短句会直接跑一轮；只认短句，闲聊里提到刷视频不会触发。"
+  },
+  "peak_valley": {
+    "description": "只在谷时窗运行",
+    "type": "bool",
+    "default": false,
+    "hint": "打开后只在 12:00–14:00 与 18:00–09:00 两个窗口内跑（对应部分模型服务商的谷时折扣；若你的模型不在谷时定价，可关）。"
+  },
+  "proactive_share": {
+    "description": "会话沉寂时自己刷并分享",
+    "type": "bool",
+    "default": false,
+    "hint": "打开后，主人在登记的推送会话里安静超过「沉寂分钟数」，bot 会像自己刷首页一样看几条视频，挑中就以 B 站评论 @ 主人分享（不额外发 QQ 日报）。需要填「要 @ 的 B 站昵称」，且写操作有风险，建议先用页面「主动刷一条」试。"
+  },
+  "proactive_idle_minutes": {
+    "description": "会话沉寂多少分钟后才刷",
+    "type": "int",
+    "default": 30,
+    "hint": "从主人最后一次发消息算起。太短会显得黏人，建议 20–60 分钟。"
+  },
+  "proactive_max_per_day": {
+    "description": "每天最多主动分享几次",
+    "type": "int",
+    "default": 2,
+    "hint": "与日报轮次分开计数；0 = 不限（不建议）。"
+  },
+  "proactive_min_gap_minutes": {
+    "description": "两次主动分享最短间隔（分钟）",
+    "type": "int",
+    "default": 120,
+    "hint": "避免一天内连续刷好几次；0 = 不限制。"
+  },
+  "proactive_quiet_start": {
+    "description": "安静时段开始",
+    "type": "string",
+    "default": "23:00",
+    "hint": "24 小时制 HH:MM，默认 23:00 到次日 08:00 不主动发。"
+  },
+  "proactive_quiet_end": {
+    "description": "安静时段结束",
+    "type": "string",
+    "default": "08:00",
+    "hint": "24 小时制 HH:MM；与开始相同表示不设安静时段。"
+  },
+  "proactive_source": {
+    "description": "主动刷的内容来源",
+    "type": "string",
+    "options": [
+      "mixed",
+      "recommend",
+      "keywords"
+    ],
+    "default": "mixed",
+    "hint": "mixed=首页推荐流+关键词相关视频混合（更像真人）；recommend=只刷首页推荐；keywords=只搜关键词。"
+  },
+  "per_day": {
+    "description": "每天最多挑几条",
+    "type": "int",
+    "default": 20,
+    "hint": "计入当天日报的 ### BV 行数。已达上限后自动运行会跳过；/bili_force 可强制再跑。填 0 = 不设每日上限。"
+  },
+  "rounds_per_day": {
+    "description": "每天最多跑几轮（硬上限）",
+    "type": "int",
+    "default": 12,
+    "hint": "自动+手动+/bili_force 都计入，超过后当天不再跑（/bili_force 也不突破）。0 = 不限。"
+  },
+  "llm_budget_per_day": {
+    "description": "每天最多调用几次模型（硬上限）",
+    "type": "int",
+    "default": 200,
+    "hint": "判断、人设评论、预览评论都算 1 次；抽帧视觉也算 1 次。达到后本轮提前结束、预览被拒。0 = 不限。"
+  },
+  "risk_abort_threshold": {
+    "description": "连续几次风控就熔断",
+    "type": "int",
+    "default": 3,
+    "hint": "一轮里累计遇到 -412/-352/-509 达到这个次数就中止本轮，并进入冷却。"
+  },
+  "risk_cooldown_minutes": {
+    "description": "风控熔断冷却分钟数",
+    "type": "int",
+    "default": 60,
+    "hint": "熔断后自动/手动/force 都不再跑，直到冷却结束；页面会显示剩余时间。"
+  },
+  "judge_cache_days": {
+    "description": "判断结果缓存天数",
+    "type": "int",
+    "default": 7,
+    "hint": "同一 BV 的判断结果缓存 N 天，重试/强制重跑时直接复用、省模型调用。0 = 关闭缓存。"
+  },
+  "keywords": {
+    "description": "关注关键词（按百分比分配）",
+    "type": "list",
+    "items": {
+      "type": "string"
+    },
+    "default": [],
+    "hint": "一行一个，支持「关键词:占比」（0–100，可写 数码:30%）。所有关键词占比会归一化到合计 100%；不写占比的关键词平均分剩余份额；留空使用内置默认关键词（AI / 编程 / 数码）。"
+  },
+  "mix_keywords_pct": {
+    "description": "候选里关键词搜索的占比",
+    "type": "int",
+    "default": 100,
+    "hint": "0–100。与「推荐流占比」「热门榜占比」三项会自动归一化到合计 100%。默认 100 = 只按关键词搜。"
+  },
+  "mix_recommend_pct": {
+    "description": "候选里首页推荐流的占比",
+    "type": "int",
+    "default": 0,
+    "hint": "0–100。例如填 30 表示约 30% 候选来自首页推荐流；三项会一起归一化到 100%。"
+  },
+  "mix_popular_pct": {
+    "description": "候选里热门榜的占比",
+    "type": "int",
+    "default": 0,
+    "hint": "0–100。例如填 20 表示约 20% 候选来自热门视频；三项会一起归一化到 100%。"
+  },
+  "preference_weight": {
+    "description": "用户喜好权重",
+    "type": "int",
+    "default": 70,
+    "hint": "0–100，默认 70：最终分 = 用户偏好×该权重 + 模型质量×(100-该权重)。关键词命中的偏好分是 100，首页推荐 60，热门 50。调高更听你的关键词，调低更听模型判断。"
+  },
+  "pick_threshold": {
+    "description": "入选分数线",
+    "type": "int",
+    "default": 65,
+    "hint": "0–100，默认 65。加权分达到这个值才会被挑中。默认下关键词命中的视频只要质量不低于约 17 分就会入选；推荐流需要更高画面/内容质量。"
+  },
+  "days": {
+    "description": "只看最近几天",
+    "type": "int",
+    "default": 7,
+    "hint": "按搜索结果里的发布时间过滤，1–30。"
+  },
+  "max_candidates": {
+    "description": "每轮最多检查几条候选",
+    "type": "int",
+    "default": 30,
+    "hint": "搜索结果的候选上限，1–100。越大越贵（每条都要读字幕/画面 + 调一次判断模型），建议 12–50。"
+  },
+  "judge_timeout": {
+    "description": "单条判断超时（秒）",
+    "type": "float",
+    "default": 90.0,
+    "hint": "单条视频调用判断模型的最长等待时间，超时按跳过处理。"
+  },
+  "read_comments": {
+    "description": "判断时参考评论区",
+    "type": "bool",
+    "default": true,
+    "hint": "每条候选多一次评论接口请求；关闭可省请求、略快，但少一层判断依据。"
+  },
+  "min_subtitle_chars": {
+    "description": "字幕最少字数",
+    "type": "int",
+    "default": 30,
+    "hint": "字幕原文少于这个字数按「无字幕/无语音」处理，再走下面的无字幕策略。"
+  },
+  "no_subtitle_policy": {
+    "description": "无字幕视频怎么处理",
+    "type": "string",
+    "default": "skip",
+    "hint": "skip=跳过（默认，最稳）；summary=用 B 站 AI 摘要判断；comments=只用标题/简介/热评判断；vision=抽帧交给多模态模型看画面（舞蹈/游戏/音乐推荐，需 ffmpeg 和多模态模型）。视觉不可用时自动退到 summary。"
+  },
+  "vision_provider_id": {
+    "description": "抽帧用的多模态模型",
+    "type": "string",
+    "default": "",
+    "hint": "留空自动选：优先当前会话模型（需支持图片），否则找第一个支持图片的对话模型。填写提供商 ID 可强制指定。"
+  },
+  "vision_max_frames": {
+    "description": "一次抽几帧",
+    "type": "int",
+    "default": 5,
+    "hint": "2–8 帧。帧越多越贵、越慢；舞蹈类 5 帧通常够看场景和动作。"
+  },
+  "vision_max_seconds": {
+    "description": "抽帧只看前多少秒",
+    "type": "int",
+    "default": 120,
+    "hint": "10–300 秒。只下载并采样这一段，避免长视频烧流量；默认只覆盖开头 2 分钟。"
+  },
+  "vision_max_mb": {
+    "description": "抽帧下载体积上限",
+    "type": "int",
+    "default": 30,
+    "hint": "5–80 MB。超过上限只保留前 30MB，可能抽不到后半段画面。"
+  },
+  "vision_timeout": {
+    "description": "视觉模型超时（秒）",
+    "type": "int",
+    "default": 120,
+    "hint": "30–300 秒。一次抽帧请求要传多张图，给足时间；超时按无证据处理。"
+  },
+  "ffmpeg_path": {
+    "description": "ffmpeg 路径",
+    "type": "string",
+    "default": "ffmpeg",
+    "hint": "默认从 PATH 找 ffmpeg；也可以填绝对路径。抽帧功能需要 ffmpeg 和 ffprobe。"
+  },
+  "report_level": {
+    "description": "日报详细程度",
+    "type": "string",
+    "options": [
+      "full",
+      "thin",
+      "none"
+    ],
+    "default": "full",
+    "hint": "full=标题/UP/为什么值得/一句话；thin=每條一两行；none=不写报告（仍会推送本轮摘要）。"
+  },
+  "auto_comment": {
+    "description": "自动评论并 @ 你",
+    "type": "bool",
+    "default": false,
+    "hint": "⚠️ 会以登录的 B 站账号（通常是 bot 小号）在别人视频下发公开评论并 @ 你。默认关闭；新号可能有等级/风控限制，建议先手动试一条。"
+  },
+  "push_qq": {
+    "description": "日报推送到聊天平台",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后不再往 QQ/聊天主动推送日报（错误提示也一并静默，只写日志）；通知改由「B站评论 @」或私信完成。想让 bot 只在 B 站留痕时关掉。"
+  },
+  "mention_name": {
+    "description": "要 @ 的 B 站昵称（你自己主号）",
+    "type": "string",
+    "default": "",
+    "hint": "留空则不发评论（评论的意义就是 @ 那一下）。填你主号昵称，只写昵称不要带 @。"
+  },
+  "comment_per_round": {
+    "description": "每轮最多发几条评论",
+    "type": "int",
+    "default": 1,
+    "hint": "1–5。发完会尝试复核是否公开可见（回执成功 ≠ 公开可见）。"
+  },
+  "comment_text_limit": {
+    "description": "单条评论字数上限",
+    "type": "int",
+    "default": 150,
+    "hint": "建议 ≤150，过长容易被风控。"
+  },
+  "comment_use_persona": {
+    "description": "评论使用 AstrBot 人设",
+    "type": "bool",
+    "default": true,
+    "hint": "打开后用当前会话人设（取不到则用默认人设，如「隐杏珠」）改写评论文案，而不是直接抄判断模型的一句话；生成失败会自动回退。"
+  },
+  "comment_persona_hint": {
+    "description": "人设评论附加口吻要求",
+    "type": "string",
+    "default": "",
+    "hint": "可选。比如「别太热情，像随手一评」「可以带点吐槽语气」。留空只用默认约束。"
+  },
+  "comment_blocklist": {
+    "description": "评论禁词（真实姓名/个人信息）",
+    "type": "string",
+    "default": "",
+    "hint": "逗号或换行分隔。把不希望出现在公开评论里的真实姓名、昵称、学校/单位、城市等填进来；命中的评论直接不发。"
+  },
+  "comment_guard_review": {
+    "description": "评论发送前安全复核",
+    "type": "bool",
+    "default": true,
+    "hint": "打开后每条评论发布前再让模型复核一次：真实姓名/个人信息、拉踩、攻击、引战、引流。复核失败或超时按不通过处理（宁可不发）。"
+  },
+  "push_chunk_size": {
+    "description": "日报分段长度",
+    "type": "int",
+    "default": 1500,
+    "hint": "长文按换行切成多段发送，避免平台单条消息长度限制。"
+  },
+  "dm_mode": {
+    "description": "日报投递渠道",
+    "type": "string",
+    "options": [
+      "off",
+      "only",
+      "both"
+    ],
+    "default": "off",
+    "hint": "off=只推聊天（默认）；only=只发 B 站私信、不推聊天；both=两边都发。⚠️ B 站不允许给自己发私信（21026），所以 dm_uid 必须填「另一个账号」的 UID：登录账号是发送方，dm_uid 是接收方。"
+  },
+  "dm_uid": {
+    "description": "私信接收者 UID",
+    "type": "int",
+    "default": 0,
+    "hint": "必须是与你登录账号不同的另一个 B 站 UID（B站禁止自投）。填 0 或自己的 UID 会在运行时被拦下并提示。"
+  },
+  "dm_text_limit": {
+    "description": "私信字数上限",
+    "type": "int",
+    "default": 500,
+    "hint": "B 站私信过长会报 21007，建议 ≤500。超出会先去掉理由、再截断。"
+  },
+  "inject_sent_context": {
+    "description": "让 bot 记得发过什么",
+    "type": "bool",
+    "default": true,
+    "hint": "把最近发送记录注入对话上下文，bot 才能回答「你给我发过什么」「今天日报呢」。"
+  },
+  "sent_context_days": {
+    "description": "注入最近几天的发送记录",
+    "type": "int",
+    "default": 3,
+    "hint": "只注入最近 N 天的记录；更早的记录可让 bot 调用 bili_sent_history 工具查询。"
+  },
+  "proxy": {
+    "description": "B 站请求代理",
+    "type": "string",
+    "default": "",
+    "hint": "可选，形如 http://127.0.0.1:7890。留空直连。"
+  },
+  "debug": {
+    "description": "调试日志",
+    "type": "bool",
+    "default": false,
+    "hint": "打开后本插件日志级别设为 DEBUG，输出更多内部细节（不影响宿主其它插件）。"
+  }
+}

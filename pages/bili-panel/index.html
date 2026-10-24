@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>刷会儿B站 · 控制台</title>
+    <script src="/api/plugin/page/bridge-sdk.js"></script>
+    <style>
+      :root {
+        --bg: #f4f5f9;
+        --panel: #ffffff;
+        --line: #e4e7f0;
+        --text: #1c2130;
+        --muted: #6b7385;
+        --pink: #fb7299;
+        --pink2: #ff9cb6;
+        --blue: #4a8cff;
+        --green: #17a673;
+        --amber: #d98a00;
+        --red: #d64545;
+        --radius: 16px;
+        --shadow: 0 8px 28px rgba(28, 33, 48, 0.08);
+      }
+      [data-theme="dark"] {
+        --bg: #12141a;
+        --panel: #1b1e26;
+        --line: #2b303c;
+        --text: #e9ebf2;
+        --muted: #98a1b3;
+        --shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 22px;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.65 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      }
+      .app { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+      .hero {
+        display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        padding: 22px 24px; border-radius: var(--radius); color: #fff;
+        background: linear-gradient(120deg, #fb7299 0%, #ff9cb6 45%, #7aa8ff 100%);
+        box-shadow: 0 10px 30px rgba(251, 114, 153, 0.28);
+      }
+      .brand { display: flex; align-items: center; gap: 14px; }
+      .logo {
+        width: 46px; height: 46px; border-radius: 14px; background: rgba(255,255,255,0.22);
+        display: grid; place-items: center; font-size: 24px; font-weight: 800;
+        backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.35);
+      }
+      .hero h1 { margin: 0; font-size: 21px; letter-spacing: 0.5px; }
+      .hero .sub { margin: 2px 0 0; font-size: 12px; opacity: 0.9; }
+      .hero-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .hero .pill { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: #fff; }
+      .hero .muted { color: rgba(255,255,255,0.85); }
+
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+      .card {
+        background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+        box-shadow: var(--shadow); padding: 16px 18px;
+      }
+      .stat-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; }
+      .stat-value { font-size: 22px; font-weight: 700; margin: 4px 0 8px; letter-spacing: 0.3px; }
+      .bar { height: 7px; border-radius: 99px; background: color-mix(in srgb, var(--muted) 18%, transparent); overflow: hidden; }
+      .bar > i { display: block; height: 100%; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--pink), var(--pink2)); transition: width 0.5s ease; }
+      .bar.blue > i { background: linear-gradient(90deg, #4a8cff, #7aa8ff); }
+      .bar.green > i { background: linear-gradient(90deg, #17a673, #4ed6a4); }
+      .stat-foot { margin-top: 8px; color: var(--muted); font-size: 12px; }
+
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+      .btn {
+        font: inherit; padding: 9px 16px; border-radius: 11px; cursor: pointer;
+        border: 1px solid var(--line); background: var(--panel); color: var(--text);
+        transition: transform 0.08s ease, background 0.15s ease, box-shadow 0.15s ease;
+      }
+      .btn:hover { background: color-mix(in srgb, var(--pink) 8%, var(--panel)); box-shadow: 0 3px 10px rgba(251,114,153,0.12); }
+      .btn:active { transform: translateY(1px); }
+      .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+      .btn.primary { border: none; color: #fff; font-weight: 700; background: linear-gradient(135deg, var(--pink), var(--pink2)); }
+      .btn.danger { color: var(--red); }
+      .btn.ghost { background: transparent; }
+
+      .two-col { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; }
+      @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } body { padding: 14px; } }
+      .card-title { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; margin-bottom: 10px; }
+      .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+      .list li { padding: 9px 11px; border: 1px solid var(--line); border-radius: 11px; background: color-mix(in srgb, var(--bg) 45%, var(--panel)); }
+      .list li.empty { border-style: dashed; color: var(--muted); background: transparent; text-align: center; }
+      .list .item-title { font-weight: 600; display: block; }
+      .list .item-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+      .list a { color: var(--blue); text-decoration: none; }
+      .list a:hover { text-decoration: underline; }
+
+      .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+      .chip { padding: 3px 10px; border-radius: 999px; font-size: 12px; background: color-mix(in srgb, var(--pink) 12%, transparent); color: var(--pink); }
+      .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 18px; }
+      .meta-grid b { display: block; font-weight: 600; word-break: break-all; }
+      .muted { color: var(--muted); }
+      .tiny { margin-top: 10px; font-size: 11px; color: var(--muted); word-break: break-all; }
+
+      .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); }
+      .pill.ok { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); border-color: transparent; }
+      .pill.warn { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); border-color: transparent; }
+      .pill.bad { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); border-color: transparent; }
+
+      .qr { display: none; }
+      .qr.show { display: block; }
+      .qr-box { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+      .qr-box img { width: 240px; height: 240px; padding: 10px; border-radius: 16px; background: #fff; border: 1px solid var(--line); }
+      .qr-tip { max-width: 340px; }
+      .qr-tip h3 { margin: 0 0 6px; font-size: 16px; }
+      .qr-state { margin: 0 0 12px; color: var(--muted); }
+
+      .report, .history { display: none; }
+      .report.show, .history.show { display: block; }
+      .report-body {
+        max-height: 62vh; overflow: auto; padding: 14px 16px; border-radius: 12px;
+        border: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 55%, var(--panel));
+        white-space: normal; word-break: break-word; font-size: 13px;
+      }
+      .report-body h2, .report-body h3 { margin: 14px 0 6px; }
+      .report-body h2 { font-size: 17px; }
+      .report-body h3 { font-size: 15px; color: var(--pink); }
+      .report-body .li { margin: 2px 0; }
+      .report-body a { color: var(--blue); }
+      .history-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+      .overview { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+      .overview-text { font-weight: 600; }
+      .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 12px; }
+      .form-grid label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+      .form-grid input, .form-grid select {
+        font: inherit; padding: 8px 10px; border-radius: 10px;
+        border: 1px solid var(--line); background: var(--panel); color: var(--text);
+      }
+      .weight-editor, .mix-editor {
+        margin: 14px 0 4px; padding: 12px; border-radius: 12px;
+        border: 1px solid var(--line); background: rgba(255,255,255,0.02);
+      }
+      .weight-head, .mix-head {
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 10px; margin-bottom: 10px; font-size: 13px; flex-wrap: wrap;
+      }
+      .weight-head .muted, .mix-head .muted { font-size: 12px; margin-left: 8px; }
+      .weight-total {
+        font-size: 12px; padding: 3px 9px; border-radius: 999px;
+        border: 1px solid var(--line); background: rgba(255,255,255,0.06);
+      }
+      .weight-total.ok { color: #7ee787; border-color: rgba(126,231,135,0.45); }
+      .weight-total.bad { color: #ff9b9b; border-color: rgba(255,155,155,0.45); }
+      .weight-rows { display: flex; flex-direction: column; gap: 8px; }
+      .weight-row { display: grid; grid-template-columns: 1fr 96px 30px; gap: 8px; align-items: center; }
+      .weight-row input, .mix-grid input {
+        font: inherit; width: 100%; padding: 7px 9px; border-radius: 9px;
+        border: 1px solid var(--line); background: var(--panel); color: var(--text);
+      }
+      .weight-row .pct { position: relative; }
+      .weight-row .pct span {
+        position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+        font-size: 11px; color: var(--muted); pointer-events: none;
+      }
+      .weight-row .pct input { padding-right: 26px; text-align: right; }
+      .weight-row .del {
+        font: inherit; font-size: 16px; line-height: 1; cursor: pointer; color: var(--muted);
+        background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 4px 0;
+      }
+      .weight-row .del:hover { color: #ff9b9b; border-color: rgba(255,155,155,0.35); }
+      .weight-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+      .btn.small { padding: 5px 10px; font-size: 12px; }
+      .mix-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+      .mix-grid label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+      .mix-bar {
+        display: flex; height: 8px; margin-top: 10px; border-radius: 999px;
+        overflow: hidden; background: rgba(255,255,255,0.06);
+      }
+      .mix-bar span { height: 100%; transition: width 0.15s ease; }
+      .mix-bar .k { background: #5b8cff; }
+      .mix-bar .r { background: #39c5bb; }
+      .mix-bar .p { background: #f0a35e; }
+      .switches { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 14px 0; font-size: 13px; }
+      .switches label { display: inline-flex; align-items: center; gap: 6px; }
+      .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+      .toast {
+        position: fixed; right: 22px; top: 22px; z-index: 99;
+        display: flex; flex-direction: column; gap: 8px;
+        pointer-events: none;
+      }
+      .toast .t {
+        padding: 10px 14px; border-radius: 11px; color: #fff; font-size: 13px;
+        background: rgba(28, 33, 48, 0.92); box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+        animation: slidein 0.18s ease; max-width: 360px;
+      }
+      .toast .t.ok { background: var(--green); }
+      .toast .t.err { background: var(--red); }
+      @keyframes slidein { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="hero">
+        <div class="brand">
+          <div class="logo">B</div>
+          <div>
+            <h1>刷会儿B站</h1>
+            <p class="sub">扫码登录 · 自动刷 · 评论 @ · 日报</p>
+          </div>
+        </div>
+        <div class="hero-right">
+          <span id="loginPill" class="pill">读取中…</span>
+          <span id="updated" class="muted">—</span>
+        </div>
+      </header>
+
+      <section class="card overview">
+        <div>
+          <span class="muted">今日速览</span>
+          <div class="overview-text" id="overviewText">—</div>
+        </div>
+        <button class="btn ghost" id="btnOverviewReport">打开今日日报</button>
+      </section>
+
+      <section class="grid">
+        <div class="card">
+          <div class="stat-head"><span>今日挑中</span><span class="pill" id="quotaBadge">—</span></div>
+          <div class="stat-value" id="quotaValue">—</div>
+          <div class="bar"><i id="quotaBar"></i></div>
+          <div class="stat-foot" id="quotaFoot">今日上限 —</div>
+        </div>
+        <div class="card">
+          <div class="stat-head"><span>模型调用</span><span class="pill" id="llmBadge">—</span></div>
+          <div class="stat-value" id="llmValue">—</div>
+          <div class="bar blue"><i id="llmBar"></i></div>
+          <div class="stat-foot" id="llmFoot">今日预算 —</div>
+        </div>
+        <div class="card">
+          <div class="stat-head"><span>今日轮次</span><span class="pill" id="roundBadge">—</span></div>
+          <div class="stat-value" id="roundValue">—</div>
+          <div class="bar green"><i id="roundBar"></i></div>
+          <div class="stat-foot" id="roundFoot">每日上限 —</div>
+        </div>
+        <div class="card">
+          <div class="stat-head"><span>自动运行</span><span class="pill" id="autoBadge">—</span></div>
+          <div class="stat-value" id="autoValue">—</div>
+          <div class="stat-foot" id="autoFoot">下次 —</div>
+        </div>
+      </section>
+
+      <section class="card actions">
+        <button class="btn primary" id="btnLogin">扫码登录</button>
+        <button class="btn" id="btnRun">▶ 现在跑一轮</button>
+        <button class="btn" id="btnProactive">刷一条（主动分享）</button>
+        <button class="btn" id="btnPreview">预览评论</button>
+        <button class="btn" id="btnReport">今日日报</button>
+        <button class="btn" id="btnHistory">历史日报</button>
+        <button class="btn ghost" id="btnRefresh">刷新</button>
+        <button class="btn danger" id="btnLogout">清除登录</button>
+        <span class="muted" id="actionHint"></span>
+      </section>
+
+      <section class="card">
+        <div class="card-title"><span>快捷设置</span><span class="muted">保存后立即生效，并同步到插件配置页</span></div>
+        <div class="weight-editor">
+          <div class="weight-head">
+            <div><strong>关注关键词</strong><span class="muted">按占比分配候选，合计 100%</span></div>
+            <span class="weight-total" id="kwTotal">合计 0%</span>
+          </div>
+          <div class="weight-rows" id="kwRows"></div>
+          <div class="weight-actions">
+            <button class="btn ghost small" id="btnAddKeyword" type="button">+ 添加关键词</button>
+            <button class="btn ghost small" id="btnEvenKeywords" type="button">平均分配</button>
+            <span class="muted" id="kwHint"></span>
+          </div>
+        </div>
+        <div class="form-grid">
+          <label>每日挑中<input id="cfgPerDay" type="number" min="0" max="999" /></label>
+          <label>每日模型预算<input id="cfgLlm" type="number" min="0" /></label>
+          <label>每日轮次<input id="cfgRounds" type="number" min="0" max="100" /></label>
+          <label>每轮候选上限<input id="cfgMaxCandidates" type="number" min="1" max="100" /></label>
+          <label>自动运行时间<input id="cfgRunAt" placeholder="22:00" /></label>
+          <label>要 @ 的昵称<input id="cfgMention" /></label>
+          <label>评论字数上限<input id="cfgCommentLimit" type="number" min="20" max="150" /></label>
+          <label>无字幕视频<select id="cfgNoSubtitlePolicy">
+            <option value="skip">跳过（默认）</option>
+            <option value="summary">用 AI 摘要判断</option>
+            <option value="comments">用热评判断</option>
+            <option value="vision">抽帧看画面</option>
+          </select></label>
+          <label>抽帧张数<input id="cfgVisionFrames" type="number" min="2" max="8" /></label>
+          <label>抽帧前多少秒<input id="cfgVisionSeconds" type="number" min="10" max="300" /></label>
+          <label>用户喜好权重<input id="cfgPreferenceWeight" type="number" min="0" max="100" /></label>
+          <label>入选分数线<input id="cfgPickThreshold" type="number" min="0" max="100" /></label>
+          <label>风控熔断阈值<input id="cfgRiskThreshold" type="number" min="1" max="20" /></label>
+          <label>沉寂多少分钟后刷<input id="cfgProactiveIdle" type="number" min="5" max="1440" /></label>
+          <label>每天最多主动分享<input id="cfgProactiveMax" type="number" min="0" max="10" /></label>
+          <label>两次主动分享间隔(分)<input id="cfgProactiveGap" type="number" min="0" max="1440" /></label>
+        </div>
+        <div class="mix-editor">
+          <div class="mix-head">
+            <div><strong>来源占比</strong><span class="muted">关键词 / 首页推荐 / 热门榜</span></div>
+            <span class="weight-total" id="mixTotal">合计 100%</span>
+          </div>
+          <div class="mix-grid">
+            <label>关键词搜索<input id="cfgMixKeywords" type="number" min="0" max="100" /></label>
+            <label>首页推荐<input id="cfgMixRecommend" type="number" min="0" max="100" /></label>
+            <label>热门榜<input id="cfgMixPopular" type="number" min="0" max="100" /></label>
+          </div>
+          <div class="mix-bar" id="mixBar">
+            <span class="k" id="mixBarKeywords"></span>
+            <span class="r" id="mixBarRecommend"></span>
+            <span class="p" id="mixBarPopular"></span>
+          </div>
+        </div>
+        <div class="switches">
+          <label><input type="checkbox" id="cfgAutoRun" /> 自动运行</label>
+          <label><input type="checkbox" id="cfgNlTrigger" /> 自然语言触发</label>
+          <label><input type="checkbox" id="cfgProactiveShare" /> 沉寂时自己刷并分享</label>
+          <label><input type="checkbox" id="cfgPeak" /> 只在谷时窗</label>
+          <label><input type="checkbox" id="cfgAutoComment" /> 自动评论 @</label>
+          <label><input type="checkbox" id="cfgPushQQ" /> 聊天推送</label>
+          <label><input type="checkbox" id="cfgPersona" /> 人设评论</label>
+          <label><input type="checkbox" id="cfgCommentGuard" /> 评论前 AI 复核</label>
+          <label>评论禁词（真实姓名/个人信息，逗号分隔）<input id="cfgCommentBlocklist" type="text" /></label>
+          <label><input type="checkbox" id="cfgReadComments" /> 判断参考热评</label>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="btnSaveConfig">保存设置</button>
+          <span class="muted" id="cfgHint"></span>
+        </div>
+      </section>
+
+      <section class="two-col">
+        <div class="card">
+          <div class="card-title"><span>今日挑中</span><span class="muted" id="pickedCount"></span></div>
+          <ul class="list" id="pickedList"><li class="empty">还没有挑中记录</li></ul>
+        </div>
+        <div class="card">
+          <div class="card-title"><span>最近发送</span><span class="muted" id="sentCount"></span></div>
+          <ul class="list" id="sentList"><li class="empty">还没有发送记录</li></ul>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="chips" id="keywordChips"></div>
+        <div class="meta-grid">
+          <div><span class="muted">推送会话</span><b id="pushText">—</b></div>
+          <div><span class="muted">通知渠道</span><b id="channelText">—</b></div>
+          <div><span class="muted">上次运行</span><b id="lastRunText">—</b></div>
+          <div><span class="muted">下次自动</span><b id="nextRunText">—</b></div>
+        </div>
+        <div class="tiny" id="dirText"></div>
+      </section>
+
+      <section class="card qr" id="qrPanel">
+        <div class="qr-box">
+          <img id="qrImage" alt="B 站登录二维码" />
+          <div class="qr-tip">
+            <h3>用手机 B 站扫码</h3>
+            <p class="qr-state" id="qrState">等待扫码…</p>
+            <p class="muted">确认登录时选「记住我 / 长期」，过期后重新生成即可。</p>
+            <button class="btn ghost" id="btnQrCancel">取消登录</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card report" id="reportPanel">
+        <div class="card-title">
+          <span id="reportTitle">日报</span>
+          <button class="btn ghost" id="btnReportClose">收起</button>
+        </div>
+        <div class="report-body" id="reportBody"></div>
+      </section>
+
+      <section class="card history" id="historyPanel">
+        <div class="card-title">
+          <span>历史日报</span>
+          <button class="btn ghost" id="btnHistoryClose">收起</button>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </section>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+      (function () {
+        const bridge = window.AstrBotPluginPage;
+        const $ = (id) => document.getElementById(id);
+        let qrTimer = null;
+        let runTimer = null;
+        let refreshTimer = null;
+        let formDirty = false;
+
+        function toast(text, kind) {
+          if (!text) return;
+          const node = document.createElement("div");
+          node.className = "t" + (kind ? " " + kind : "");
+          node.textContent = text;
+          $("toast").appendChild(node);
+          setTimeout(() => node.remove(), 4200);
+        }
+
+        function call(method, endpoint, body) {
+          if (!bridge) {
+            return Promise.reject(new Error("页面桥接未加载，请从 AstrBot WebUI 的插件页面打开"));
+          }
+          return method === "POST"
+            ? bridge.apiPost(endpoint, body || {})
+            : bridge.apiGet(endpoint, body || {});
+        }
+
+        function fmtTime(ts) {
+          const d = new Date(ts);
+          return d.toLocaleTimeString("zh-CN", { hour12: false });
+        }
+
+        function pct(value, total) {
+          if (!total) return 0;
+          return Math.max(0, Math.min(100, Math.round((value / total) * 100)));
+        }
+
+        function setBar(id, value, total) {
+          $(id).style.width = pct(value, total) + "%";
+        }
+
+        function mdToHtml(md) {
+          let h = String(md || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+          h = h
+            .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+            .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+            .replace(/^# (.+)$/gm, "<h2>$1</h2>");
+          h = h.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+          h = h.replace(
+            /\[([^\]]+)\]\((https?:[^)\s]+)\)/g,
+            '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+          );
+          h = h.replace(/^- (.+)$/gm, '<div class="li">• $1</div>');
+          return h.replace(/\n/g, "<br>");
+        }
+
+        function renderStatus(s) {
+          const logged = s.logged_in;
+          $("loginPill").textContent = logged
+            ? "● 已登录" + (s.user_name ? " · " + s.user_name : "")
+            : "未登录";
+          $("loginPill").className = "pill " + (logged ? "ok" : "warn");
+
+          const perDay = s.per_day || 0;
+          $("quotaValue").textContent = s.picked_today + (perDay ? " / " + perDay : " 条");
+          $("quotaBadge").textContent = perDay
+            ? s.picked_today >= perDay
+              ? "已满"
+              : "剩余 " + Math.max(0, perDay - s.picked_today)
+            : "不限";
+          $("quotaBadge").className = "pill " + (perDay && s.picked_today >= perDay ? "warn" : "ok");
+          setBar("quotaBar", s.picked_today, perDay || s.picked_today || 1);
+          $("quotaFoot").textContent = "今日上限 " + (perDay ? perDay + " 条" : "不限");
+
+          const llmTotal = s.llm_budget_per_day || 0;
+          $("llmValue").textContent = s.llm_calls_today + (llmTotal ? " / " + llmTotal : " 次");
+          $("llmBadge").textContent = llmTotal
+            ? "剩余 " + Math.max(0, llmTotal - s.llm_calls_today)
+            : "不限";
+          $("llmBadge").className = "pill " + (llmTotal && s.llm_calls_today >= llmTotal ? "bad" : "ok");
+          setBar("llmBar", s.llm_calls_today, llmTotal || s.llm_calls_today || 1);
+          $("llmFoot").textContent = "今日预算 " + (llmTotal ? llmTotal + " 次" : "不限");
+
+          const roundTotal = s.rounds_per_day || 0;
+          $("roundValue").textContent = s.rounds_today + (roundTotal ? " / " + roundTotal : " 轮");
+          $("roundBadge").textContent = roundTotal
+            ? "剩余 " + Math.max(0, roundTotal - s.rounds_today)
+            : "不限";
+          $("roundBadge").className =
+            "pill " + (roundTotal && s.rounds_today >= roundTotal ? "warn" : "ok");
+          setBar("roundBar", s.rounds_today, roundTotal || s.rounds_today || 1);
+          $("roundFoot").textContent = "每日上限 " + (roundTotal ? roundTotal + " 轮" : "不限");
+
+          $("autoBadge").textContent = s.auto_run ? "开" : "关";
+          $("autoBadge").className = "pill " + (s.auto_run ? "ok" : "");
+          $("autoValue").textContent = s.auto_run ? s.run_at : "已关闭";
+          $("autoFoot").textContent = "下次自动：" + (s.next_run || "—");
+
+          renderPicked(s.picked_items || []);
+          renderSent(s.sent_recent || []);
+          const cfg = s.config || {};
+          renderChips(
+            (cfg.keyword_weights || []).map((item) =>
+              item.weight !== undefined
+                ? item.keyword + " " + item.weight + "%"
+                : item.keyword + " " + (item.percent || 0) + "%"
+            )
+          );
+          renderOverview(s);
+          renderConfigForm(s.config || {});
+
+          $("pushText").textContent = s.has_push_session ? "已登记" : "未登记";
+          const channel = [];
+          if (s.push_qq) channel.push("聊天");
+          if (s.dm_mode === "only" || s.dm_mode === "both") channel.push("B站私信");
+          if (s.auto_comment) channel.push("B站评论@" + (s.mention_name ? " " + s.mention_name : ""));
+          $("channelText").textContent = channel.join(" + ") || "仅本地日报";
+          $("lastRunText").textContent = s.last_run || "从未";
+          $("nextRunText").textContent = s.next_run || "—";
+          $("dirText").textContent = "数据目录：" + (s.data_dir || "—");
+
+          $("btnRun").disabled = !!s.busy;
+          $("btnProactive").disabled = !!s.busy;
+          $("actionHint").textContent = s.busy ? "正在跑一轮…" : "";
+          $("updated").textContent = "更新于 " + fmtTime(Date.now());
+        }
+
+        function renderPicked(items) {
+          const list = $("pickedList");
+          list.innerHTML = "";
+          $("pickedCount").textContent = items.length ? items.length + " 条" : "";
+          if (!items.length) {
+            list.innerHTML = '<li class="empty">还没有挑中记录，跑一轮就有了</li>';
+            return;
+          }
+          items.forEach((item) => {
+            const li = document.createElement("li");
+            const title = item.title || item.bvid || "（无标题）";
+            const url = item.url || "https://www.bilibili.com/video/" + (item.bvid || "");
+            li.innerHTML =
+              '<a class="item-title" target="_blank" rel="noopener noreferrer"></a>' +
+              '<div class="item-sub"></div>';
+            const a = li.querySelector("a");
+            a.textContent = title;
+            a.href = url;
+            li.querySelector(".item-sub").textContent =
+              (item.one_liner ? item.one_liner + " · " : "") + (item.bvid || "");
+            list.appendChild(li);
+          });
+        }
+
+        function renderSent(entries) {
+          const list = $("sentList");
+          list.innerHTML = "";
+          $("sentCount").textContent = entries.length ? entries.length + " 条" : "";
+          if (!entries.length) {
+            list.innerHTML = '<li class="empty">还没有发送记录</li>';
+            return;
+          }
+          entries
+            .slice()
+            .reverse()
+            .forEach((line) => {
+              const li = document.createElement("li");
+              li.textContent = String(line).replace(/^-\s*/, "");
+              list.appendChild(li);
+            });
+        }
+
+        function renderChips(keywords) {
+          const box = $("keywordChips");
+          box.innerHTML = "";
+          (keywords || []).forEach((kw) => {
+            const span = document.createElement("span");
+            span.className = "chip";
+            span.textContent = kw;
+            box.appendChild(span);
+          });
+        }
+
+        async function refreshStatus(manual) {
+          try {
+            const s = await call("GET", "status");
+            renderStatus(s);
+            if (manual) toast("状态已刷新", "ok");
+            return s;
+          } catch (err) {
+            if (manual) toast("读取状态失败：" + (err.message || err), "err");
+            return null;
+          }
+        }
+
+        function stopTimers() {
+          if (qrTimer) clearInterval(qrTimer);
+          if (runTimer) clearInterval(runTimer);
+          qrTimer = null;
+          runTimer = null;
+        }
+
+        async function startLogin() {
+          toast("正在生成二维码…");
+          try {
+            const r = await call("POST", "login/start");
+            if (!r.ok) {
+              toast(r.message || "生成二维码失败", "err");
+              return;
+            }
+            $("qrImage").src = r.image;
+            $("qrState").textContent = "等待扫码…";
+            $("qrPanel").classList.add("show");
+            if (qrTimer) clearInterval(qrTimer);
+            let attempts = 0;
+            qrTimer = setInterval(async () => {
+              attempts += 1;
+              try {
+                const p = await call("GET", "login/poll");
+                handlePoll(p);
+              } catch (err) {
+                /* ignore */
+              }
+              if (attempts > 90) {
+                clearInterval(qrTimer);
+                qrTimer = null;
+                $("qrState").textContent = "二维码已过期，请重新生成";
+              }
+            }, 2000);
+          } catch (err) {
+            toast("生成二维码失败：" + (err.message || err), "err");
+          }
+        }
+
+        function handlePoll(p) {
+          const node = $("qrState");
+          const map = {
+            waiting: "等待扫码…",
+            scanned: "已扫码，请在手机上确认",
+            expired: "二维码已过期，请重新生成",
+            done: "登录成功",
+            none: "没有进行中的登录",
+          };
+          if (p.state === "done") {
+            if (qrTimer) clearInterval(qrTimer);
+            qrTimer = null;
+            node.textContent = "登录成功" + (p.user_name ? "：" + p.user_name : "");
+            toast("登录成功", "ok");
+            refreshStatus(true);
+            setTimeout(() => $("qrPanel").classList.remove("show"), 2400);
+            return;
+          }
+          if (p.state === "expired" || String(p.state).startsWith("error")) {
+            if (qrTimer) clearInterval(qrTimer);
+            qrTimer = null;
+            node.textContent = map[p.state] || p.message || String(p.state);
+            return;
+          }
+          node.textContent = map[p.state] || p.state;
+        }
+
+        async function runProactive() {
+          $("btnProactive").disabled = true;
+          toast("开始刷了：读几条首页推荐，挑中会在 B 站评论 @ 你");
+          try {
+            const r = await call("POST", "proactive");
+            if (!r.accepted) {
+              toast(r.message || "未能启动", "err");
+              $("btnProactive").disabled = false;
+              return;
+            }
+            if (runTimer) clearInterval(runTimer);
+            let ticks = 0;
+            runTimer = setInterval(async () => {
+              ticks += 1;
+              const s = await refreshStatus(false);
+              if (s && !s.busy) {
+                clearInterval(runTimer);
+                runTimer = null;
+                $("btnProactive").disabled = false;
+                toast("刷完了，去 B 站看看有没有评论 @ 你", "ok");
+              }
+              if (ticks > 60) {
+                clearInterval(runTimer);
+                runTimer = null;
+                $("btnProactive").disabled = false;
+              }
+            }, 3000);
+          } catch (err) {
+            toast("启动失败：" + (err.message || err), "err");
+            $("btnProactive").disabled = false;
+          }
+        }
+
+        async function runNow() {
+          $("btnRun").disabled = true;
+          toast("已开始，1–2 分钟后回来看日报");
+          try {
+            const r = await call("POST", "run");
+            if (!r.accepted) {
+              toast(r.message || "未能启动", "err");
+              $("btnRun").disabled = false;
+              return;
+            }
+            if (runTimer) clearInterval(runTimer);
+            let ticks = 0;
+            runTimer = setInterval(async () => {
+              ticks += 1;
+              const s = await refreshStatus(false);
+              if (s && !s.busy) {
+                clearInterval(runTimer);
+                runTimer = null;
+                toast("本轮结束，可以查看今日日报", "ok");
+                $("btnRun").disabled = false;
+              }
+              if (ticks > 100) {
+                clearInterval(runTimer);
+                runTimer = null;
+                $("btnRun").disabled = false;
+              }
+            }, 3000);
+          } catch (err) {
+            toast("启动失败：" + (err.message || err), "err");
+            $("btnRun").disabled = false;
+          }
+        }
+
+        function openReport(title, markdown) {
+          $("reportTitle").textContent = title;
+          $("reportBody").innerHTML = mdToHtml(markdown) || '<span class="muted">没有内容</span>';
+          $("reportPanel").classList.add("show");
+          $("historyPanel").classList.remove("show");
+        }
+
+        async function showTodayReport() {
+          try {
+            const r = await call("GET", "report/today");
+            openReport(
+              "今日日报 · " + r.date,
+              r.exists ? r.markdown : "今天还没有日报：登录后点「现在跑一轮」。"
+            );
+          } catch (err) {
+            toast("读取日报失败：" + (err.message || err), "err");
+          }
+        }
+
+        async function showHistory() {
+          try {
+            const r = await call("GET", "reports");
+            const items = r.items || [];
+            const box = $("historyList");
+            box.innerHTML = "";
+            if (!items.length) {
+              box.innerHTML = '<span class="muted">还没有历史日报</span>';
+            }
+            items.forEach((item) => {
+              const btn = document.createElement("button");
+              btn.className = "btn";
+              btn.textContent = item.date + "（" + Math.max(1, Math.round((item.size || 0) / 1024)) + " KB）";
+              btn.addEventListener("click", async () => {
+                try {
+                  const detail = await call("GET", "report/" + encodeURIComponent(item.date));
+                  openReport("日报 · " + item.date, detail.markdown || "（空）");
+                } catch (err) {
+                  toast("读取失败：" + (err.message || err), "err");
+                }
+              });
+              box.appendChild(btn);
+            });
+            $("historyPanel").classList.add("show");
+          } catch (err) {
+            toast("读取历史失败：" + (err.message || err), "err");
+          }
+        }
+
+        async function previewComment() {
+          toast("正在用人设生成预览…");
+          try {
+            const r = await call("POST", "preview/comment");
+            if (!r.ok) {
+              toast(r.message || "预览失败", "err");
+              return;
+            }
+            openReport(
+              "评论预览 · " + (r.bvid || "") + (r.used_persona ? "（人设 " + r.persona_len + " 字）" : ""),
+              "**视频：** " + (r.title || "") + "\n\n**将于下一轮发出：**\n\n" + r.text
+            );
+            toast("预览已生成（没有发送）", "ok");
+          } catch (err) {
+            toast("预览失败：" + (err.message || err), "err");
+          }
+        }
+
+        async function logout() {
+          if (!window.confirm("确定清除本机保存的 B 站登录凭据？")) return;
+          try {
+            await call("POST", "logout");
+            stopTimers();
+            $("qrPanel").classList.remove("show");
+            toast("已清除登录凭据", "ok");
+            refreshStatus(true);
+          } catch (err) {
+            toast("清除失败：" + (err.message || err), "err");
+          }
+        }
+
+        function renderOverview(s) {
+          const first = (s.picked_items || [])[0];
+          const parts = [];
+          parts.push(s.picked_today ? "今日已挑 " + s.picked_today + " 条" : "今天还没挑中");
+          if (first && first.title) parts.push("最近：《" + first.title + "》");
+          if (s.cooldown_remaining_min) parts.push("风控冷却中，约 " + s.cooldown_remaining_min + " 分钟");
+          else if (s.last_round_api_calls) parts.push("上轮 B 站请求 " + s.last_round_api_calls + " 次");
+          $("overviewText").textContent = parts.join(" · ");
+        }
+
+        let keywordRows = [];
+
+        function keywordTotal() {
+          return keywordRows.reduce((sum, row) => sum + (Number(row.percent) || 0), 0);
+        }
+
+        function setTotalBadge(node, total, ok) {
+          if (!node) return;
+          node.textContent = "合计 " + total + "%";
+          node.classList.toggle("ok", ok);
+          node.classList.toggle("bad", !ok);
+        }
+
+        function updateKeywordTotal() {
+          const total = keywordTotal();
+          setTotalBadge($("kwTotal"), total, total === 100);
+          $("kwHint").textContent =
+            total === 100
+              ? "合计 100%，保存后立即生效"
+              : "合计需为 100%（当前 " + total + "%），保存时会按比例归一化";
+        }
+
+        function renderKeywordRows(rows) {
+          keywordRows = (rows || []).map((row) => ({
+            keyword: String((row && row.keyword) || ""),
+            percent: Math.max(0, Math.min(100, Number(row && row.percent) || 0)),
+          }));
+          const box = $("kwRows");
+          box.innerHTML = "";
+          keywordRows.forEach((row, index) => {
+            const wrap = document.createElement("div");
+            wrap.className = "weight-row";
+            const name = document.createElement("input");
+            name.type = "text";
+            name.placeholder = "关键词";
+            name.value = row.keyword;
+            const pctWrap = document.createElement("div");
+            pctWrap.className = "pct";
+            const pct = document.createElement("input");
+            pct.type = "number";
+            pct.min = "0";
+            pct.max = "100";
+            pct.step = "1";
+            pct.value = String(row.percent);
+            const unit = document.createElement("span");
+            unit.textContent = "%";
+            pctWrap.append(pct, unit);
+            const del = document.createElement("button");
+            del.type = "button";
+            del.className = "del";
+            del.textContent = "×";
+            del.title = "删除这个关键词";
+            name.addEventListener("input", () => {
+              keywordRows[index].keyword = name.value;
+              formDirty = true;
+            });
+            pct.addEventListener("input", () => {
+              keywordRows[index].percent = Math.max(
+                0,
+                Math.min(100, Number(pct.value) || 0)
+              );
+              updateKeywordTotal();
+              formDirty = true;
+            });
+            del.addEventListener("click", () => {
+              keywordRows.splice(index, 1);
+              renderKeywordRows(keywordRows);
+              formDirty = true;
+            });
+            wrap.append(name, pctWrap, del);
+            box.appendChild(wrap);
+          });
+          updateKeywordTotal();
+        }
+
+        function evenKeywords() {
+          if (!keywordRows.length) return;
+          const base = Math.floor(100 / keywordRows.length);
+          let remainder = 100 - base * keywordRows.length;
+          keywordRows.forEach((row, index) => {
+            row.percent = base + (index < remainder ? 1 : 0);
+          });
+          renderKeywordRows(keywordRows);
+          formDirty = true;
+        }
+
+        function readKeywordRows() {
+          return keywordRows
+            .filter((row) => row.keyword.trim())
+            .map((row) => row.keyword.trim() + ":" + (Number(row.percent) || 0));
+        }
+
+        function applyMixValues(keywords, recommend, popular) {
+          const values = {
+            cfgMixKeywords: keywords,
+            cfgMixRecommend: recommend,
+            cfgMixPopular: popular,
+          };
+          Object.keys(values).forEach((id) => {
+            const el = $(id);
+            if (el && document.activeElement !== el) el.value = String(values[id]);
+          });
+          updateMixTotal();
+        }
+
+        function readMixValues() {
+          return {
+            keywords: Number($("cfgMixKeywords").value || 0),
+            recommend: Number($("cfgMixRecommend").value || 0),
+            popular: Number($("cfgMixPopular").value || 0),
+          };
+        }
+
+        function updateMixTotal() {
+          const mix = readMixValues();
+          const total = mix.keywords + mix.recommend + mix.popular;
+          setTotalBadge($("mixTotal"), total, total === 100);
+          const denom = total > 0 ? total : 1;
+          $("mixBarKeywords").style.width = (mix.keywords / denom) * 100 + "%";
+          $("mixBarRecommend").style.width = (mix.recommend / denom) * 100 + "%";
+          $("mixBarPopular").style.width = (mix.popular / denom) * 100 + "%";
+        }
+
+        function renderConfigForm(c) {
+          if (formDirty) return; // 用户正在编辑时不覆盖未保存内容
+          const textFields = {
+            cfgPerDay: c.per_day,
+            cfgLlm: c.llm_budget_per_day,
+            cfgRounds: c.rounds_per_day,
+            cfgMaxCandidates: c.max_candidates,
+            cfgRunAt: c.run_at,
+            cfgMention: c.mention_name,
+            cfgCommentLimit: c.comment_text_limit,
+            cfgVisionFrames: c.vision_max_frames,
+            cfgVisionSeconds: c.vision_max_seconds,
+            cfgPreferenceWeight: c.preference_weight,
+            cfgPickThreshold: c.pick_threshold,
+            cfgRiskThreshold: c.risk_abort_threshold,
+            cfgProactiveIdle: c.proactive_idle_minutes,
+            cfgProactiveMax: c.proactive_max_per_day,
+            cfgProactiveGap: c.proactive_min_gap_minutes,
+          };
+          Object.keys(textFields).forEach((id) => {
+            const el = $(id);
+            if (el && document.activeElement !== el) {
+              el.value = textFields[id] === undefined || textFields[id] === null ? "" : textFields[id];
+            }
+          });
+          if (!$("kwRows").contains(document.activeElement)) {
+            renderKeywordRows(c.keyword_weights || []);
+          }
+          if (document.activeElement !== $("cfgNoSubtitlePolicy")) {
+            $("cfgNoSubtitlePolicy").value = c.no_subtitle_policy || "skip";
+          }
+          applyMixValues(
+            c.mix_keywords_pct === undefined ? 100 : c.mix_keywords_pct,
+            c.mix_recommend_pct === undefined ? 0 : c.mix_recommend_pct,
+            c.mix_popular_pct === undefined ? 0 : c.mix_popular_pct
+          );
+          const boolFields = {
+            cfgAutoRun: c.auto_run,
+            cfgNlTrigger: c.nl_trigger,
+            cfgPeak: c.peak_valley,
+            cfgAutoComment: c.auto_comment,
+            cfgPushQQ: c.push_qq,
+            cfgPersona: c.comment_use_persona,
+            cfgCommentGuard: c.comment_guard_review,
+            cfgCommentBlocklist: c.comment_blocklist,
+            cfgReadComments: c.read_comments,
+            cfgProactiveShare: c.proactive_share,
+          };
+          Object.keys(boolFields).forEach((id) => {
+            const el = $(id);
+            if (el && document.activeElement !== el) el.checked = !!boolFields[id];
+          });
+        }
+
+        async function saveConfig() {
+          const mix = readMixValues();
+          const keywordNormalized = keywordTotal() !== 100;
+          const mixNormalized = mix.keywords + mix.recommend + mix.popular !== 100;
+          const payload = {
+            keywords: readKeywordRows(),
+            per_day: Number($("cfgPerDay").value || 0),
+            llm_budget_per_day: Number($("cfgLlm").value || 0),
+            rounds_per_day: Number($("cfgRounds").value || 0),
+            max_candidates: Number($("cfgMaxCandidates").value || 30),
+            run_at: $("cfgRunAt").value.trim(),
+            mention_name: $("cfgMention").value.trim(),
+            comment_text_limit: Number($("cfgCommentLimit").value || 150),
+            no_subtitle_policy: $("cfgNoSubtitlePolicy").value,
+            vision_max_frames: Number($("cfgVisionFrames").value || 5),
+            vision_max_seconds: Number($("cfgVisionSeconds").value || 120),
+            preference_weight: Number($("cfgPreferenceWeight").value || 70),
+            pick_threshold: Number($("cfgPickThreshold").value || 65),
+            risk_abort_threshold: Number($("cfgRiskThreshold").value || 3),
+            proactive_idle_minutes: Number($("cfgProactiveIdle").value || 30),
+            proactive_max_per_day: Number($("cfgProactiveMax").value || 2),
+            proactive_min_gap_minutes: Number($("cfgProactiveGap").value || 120),
+            mix_keywords_pct: mix.keywords,
+            mix_recommend_pct: mix.recommend,
+            mix_popular_pct: mix.popular,
+            proactive_share: $("cfgProactiveShare").checked,
+            auto_run: $("cfgAutoRun").checked,
+            nl_trigger: $("cfgNlTrigger").checked,
+            peak_valley: $("cfgPeak").checked,
+            auto_comment: $("cfgAutoComment").checked,
+            push_qq: $("cfgPushQQ").checked,
+            comment_use_persona: $("cfgPersona").checked,
+            comment_guard_review: $("cfgCommentGuard").checked,
+            comment_blocklist: $("cfgCommentBlocklist").value.trim(),
+            read_comments: $("cfgReadComments").checked,
+          };
+          try {
+            const r = await call("POST", "config", payload);
+            if (r.ok) {
+              toast(
+                keywordNormalized || mixNormalized
+                  ? "设置已保存（占比已归一化）"
+                  : "设置已保存",
+                "ok"
+              );
+              formDirty = false;
+              $("cfgHint").textContent = "";
+              refreshStatus(true);
+            } else {
+              const hint = (r.issues || []).join("；") || r.message || "保存失败";
+              $("cfgHint").textContent = hint;
+              toast("部分设置未保存", "err");
+              refreshStatus(false);
+            }
+          } catch (err) {
+            toast("保存失败：" + (err.message || err), "err");
+          }
+        }
+
+        function bind() {
+          $("btnLogin").addEventListener("click", startLogin);
+          $("btnRun").addEventListener("click", runNow);
+          $("btnProactive").addEventListener("click", runProactive);
+          $("btnPreview").addEventListener("click", previewComment);
+          $("btnReport").addEventListener("click", showTodayReport);
+          $("btnHistory").addEventListener("click", showHistory);
+          $("btnSaveConfig").addEventListener("click", saveConfig);
+          $("btnOverviewReport").addEventListener("click", showTodayReport);
+          $("btnAddKeyword").addEventListener("click", () => {
+            keywordRows.push({ keyword: "", percent: 0 });
+            renderKeywordRows(keywordRows);
+            formDirty = true;
+            const inputs = $("kwRows").querySelectorAll("input[type=text]");
+            if (inputs.length) inputs[inputs.length - 1].focus();
+          });
+          $("btnEvenKeywords").addEventListener("click", evenKeywords);
+          $("kwRows").addEventListener("input", () => {
+            formDirty = true;
+          });
+          ["cfgMixKeywords", "cfgMixRecommend", "cfgMixPopular"].forEach((id) => {
+            $(id).addEventListener("input", updateMixTotal);
+          });
+          document
+            .querySelectorAll(
+              "#cfgPerDay,#cfgLlm,#cfgRounds,#cfgMaxCandidates,#cfgRunAt,#cfgMention,#cfgCommentLimit,#cfgCommentBlocklist,#cfgNoSubtitlePolicy,#cfgVisionFrames,#cfgVisionSeconds,#cfgPreferenceWeight,#cfgPickThreshold,#cfgRiskThreshold,#cfgProactiveIdle,#cfgProactiveMax,#cfgProactiveGap,#cfgMixKeywords,#cfgMixRecommend,#cfgMixPopular,#cfgAutoRun,#cfgNlTrigger,#cfgPeak,#cfgAutoComment,#cfgPushQQ,#cfgPersona,#cfgCommentGuard,#cfgReadComments,#cfgProactiveShare"
+            )
+            .forEach((el) => {
+              el.addEventListener("input", () => {
+                formDirty = true;
+              });
+              el.addEventListener("change", () => {
+                formDirty = true;
+              });
+            });
+          $("btnRefresh").addEventListener("click", () => refreshStatus(true));
+          $("btnLogout").addEventListener("click", logout);
+          $("btnReportClose").addEventListener("click", () => $("reportPanel").classList.remove("show"));
+          $("btnHistoryClose").addEventListener("click", () => $("historyPanel").classList.remove("show"));
+          $("btnQrCancel").addEventListener("click", async () => {
+            try {
+              await call("POST", "login/cancel");
+            } catch (err) {
+              /* ignore */
+            }
+            if (qrTimer) clearInterval(qrTimer);
+            qrTimer = null;
+            $("qrPanel").classList.remove("show");
+            toast("已取消登录");
+          });
+          document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+              if (refreshTimer) clearInterval(refreshTimer);
+              refreshTimer = null;
+            } else {
+              refreshStatus(false);
+              startAutoRefresh();
+            }
+          });
+          startAutoRefresh();
+        }
+
+        function startAutoRefresh() {
+          if (refreshTimer) clearInterval(refreshTimer);
+          refreshTimer = setInterval(() => {
+            if (!document.hidden && !document.querySelector(".qr.show")) refreshStatus(false);
+          }, 20000);
+        }
+
+        async function boot() {
+          if (!bridge) {
+            toast("页面桥接未加载：请从 AstrBot WebUI 的插件页面打开", "err");
+            return;
+          }
+          try {
+            await bridge.ready();
+          } catch (err) {
+            /* 旧版没有 ready 时继续 */
+          }
+          bind();
+          await refreshStatus(false);
+        }
+
+        document.addEventListener("DOMContentLoaded", boot);
+      })();
+    </script>
+  </body>
+</html>

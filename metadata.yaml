@@ -1,0 +1,27 @@
+name: astrbot_plugin_bili_scroll
+desc: 替你刷会儿 B 站：搜索关键词、读字幕原文判断、写一份日报推送到聊天，可选评论 @ 你。
+help: |
+  WebUI 插件页面「刷会儿B站」：扫码登录、看状态、手动跑一轮、查看今日日报。
+  /bili_login  扫二维码登录 B 站（凭据只保存在本机插件数据目录）
+  /bili_scroll 立即跑一轮（并把当前会话登记为日报推送目标）
+  /bili_status 查看登录状态、今日已挑条数与上次运行时间
+  /bili_force  忽略今日配额再跑一轮
+  /bili_sent   查看最近发给你的日报 / B站私信 / B站评论记录
+  也可以直接说「你去刷会视频吧」「帮我刷会儿视频」这类命令式短句触发（仅管理员，nl_trigger 可关）。
+  通知方式：配置 auto_comment=true + mention_name=你的主号昵称，由 bot 小号在评论区 @ 你；
+  不想让 QQ 收到推送就把 push_qq 关掉（日报仍写本地，bot 仍记得发过什么）。
+
+  自动运行需在插件配置里打开「每日自动刷」，并确认宿主平台支持主动消息
+  （QQ 个人号 aiocqhttp / Telegram / WebChat / 飞书；QQ 官方 API 不支持）。
+  评论与 @ 默认关闭：开启后会以登录的 B 站账号（通常是 bot 小号）发言，请先确认配额与 @ 对象。
+version: 0.12.1
+author: SIiOC
+repo: https://github.com/SIiOC/astrbot-plugin-bili-scroll
+display_name: 刷会儿B站
+short_desc: 替你刷会儿B站：读字幕挑值得的，日报推聊天
+astrbot_version: ">=4.9.2,<5"
+tags:
+  - bilibili
+  - 日报
+  - 字幕
+  - 主动消息
