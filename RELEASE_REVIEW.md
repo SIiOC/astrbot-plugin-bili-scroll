@@ -2,7 +2,7 @@
 
 审查日期：2026-10-24  
 审查范围：源码、配置、WebUI、测试、发布包、live 部署、GitHub 发布、许可与署名。  
-结论：**0.12.2 已通过审查并发布到 GitHub；仍缺 GitHub Release 附件、截图与插件市场提交。**
+结论：**0.12.2 已通过审查并发布到 GitHub（repo + tag + Release 附件 + CI 绿）；仍缺截图与插件市场提交。**
 
 ## 通过项
 
@@ -21,8 +21,8 @@
 | 评论复核 live 冒烟 | 预览生成成功，未发公开评论 |
 
 发布包：`release/astrbot_plugin_bili_scroll-0.12.2.zip`  
-大小：104,517 B  
-SHA256：`7b6874b051e37d39bef22f306682ff6aca9a8163b34193a92ba4d047be7672a6`
+本地构建：104,517 B，SHA256 `7b6874b051e37d39bef22f306682ff6aca9a8163b34193a92ba4d047be7672a6`  
+GitHub Release 附件：104,512 B，SHA256 `d89e1e52c2645269ae8842fdf449794d4eb36dad82c9acc9a52c6ccf6ed29278`（CI 构建，已解压验证 `import main` 成功）
 
 ## 发布状态
 
@@ -30,6 +30,7 @@ SHA256：`7b6874b051e37d39bef22f306682ff6aca9a8163b34193a92ba4d047be7672a6`
 - 分支：`main` = `ce29d1c`
 - tag：`v0.12.2` = `ce29d1c`
 - CI：<https://github.com/SIiOC/astrbot-plugin-bili-scroll/actions/runs/40064096783>（success）
+- Release：<https://github.com/SIiOC/astrbot-plugin-bili-scroll/releases/tag/v0.12.2>（zip + sha256 已上传并校验）
 - 0.12.1 的 tag 与 CI 运行保留，但其 CI 因依赖声明缺失失败，**不要用 0.12.1 安装包**
 
 ## 本轮发现并修复
@@ -51,7 +52,7 @@ SHA256：`7b6874b051e37d39bef22f306682ff6aca9a8163b34193a92ba4d047be7672a6`
 
 | 优先级 | 事项 | 状态 |
 |---|---|---|
-| P1 | GitHub Release 附件 | tag 已推送；zip 未上传到 Release（本机无法无凭据创建 Release） |
+| P1 | GitHub Release 附件 | 已完成：zip + sha256 已上传，SHA256 校验与解压 import 均通过 |
 | P1 | README 截图/市场展示图 | 未处理 |
 | P1 | AstrBot 插件市场提交 | 未处理，需市场账号 |
 | P1 | `comment_blocklist` 为空 | 需填入真实姓名/别名/单位等禁词 |
