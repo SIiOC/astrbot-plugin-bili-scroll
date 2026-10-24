@@ -1,0 +1,52 @@
+name: Release
+
+# 仅在首次添加本工作流时触发一次：为已推送的 v0.12.2 tag 生成 GitHub Release 附件。
+# 后续代码变更由 CI 工作流负责，不重复发版。
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install runtime deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build release package
+        run: python tools/build_release.py --force
+
+      - name: Verify release package
+        run: python tools/verify_release.py --skip-import
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.12.2
+          name: 0.12.2
+          draft: false
+          prerelease: false
+          body: |
+            刷会儿B站 0.12.2。
+
+            - 修复干净环境缺少 aiohttp 依赖导致导入失败
+            - 发布前审查修复：群聊发送记录隔离、评论复核 fail-closed、PII/拉踩误伤、字幕 URL 校验、存储上限
+            - 157 单测通过，GitHub Actions CI 通过
+          files: |
+            release/astrbot_plugin_bili_scroll-0.12.2.zip
+            release/astrbot_plugin_bili_scroll-0.12.2.zip.sha256
