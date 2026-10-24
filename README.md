@@ -34,7 +34,7 @@ https://github.com/SIiOC/astrbot-plugin-bili-scroll
 **方式三：手动 / zip**
 
 1. 把 `astrbot_plugin_bili_scroll/` 目录放到 AstrBot 的 `data/plugins/` 下（或上传 release zip）。
-2. 依赖由 AstrBot 按 `requirements.txt` 自动安装：`bilibili-api-python>=17.4.1,<18`、`qrcode[pil]>=7.4`。
+2. 依赖由 AstrBot 按 `requirements.txt` 自动安装：`bilibili-api-python>=17.4.1,<18`、`qrcode[pil]>=7.4`、`aiohttp>=3.8`。
 3. 重启 AstrBot，或在「插件管理」里重载本插件。
 
 装好后进插件配置页填关键词、每日条数、自动运行时间；控制台在「插件 WebUI → 刷会儿B站」。

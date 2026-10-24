@@ -2,6 +2,13 @@
 
 本项目遵循语义化版本（`MAJOR.MINOR.PATCH`）。版本号在 `metadata.yaml` 中维护。
 
+## 0.12.2 — 2026-10-24
+
+### 修复
+
+- `requirements.txt` 补上直接依赖 `aiohttp>=3.8`：`bili_client.py` 直接 import aiohttp，之前依赖宿主环境碰巧安装；干净环境/CI 会因 `ModuleNotFoundError` 失败
+- GitHub Actions 的 0.12.1 构建因此失败；0.12.2 修复后重跑 CI
+
 ## 0.12.1 — 2026-10-23
 
 ### 发布前审查修复
