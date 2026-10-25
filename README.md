@@ -4,6 +4,8 @@ AstrBot 插件：按关键词搜 B 站近几天的视频，**逐条读字幕原�
 
 实现方式：插件内确定性流水线（搜索 → 字幕 → 单条 LLM 判断 → 日报/通知），B 站能力通过 `bilibili-api-python` 直连，不使用浏览器自动化，也不依赖外部 agent 运行时。
 
+给对话模型/插件执行助手看的操作规范：[BOT_GUIDE.md](BOT_GUIDE.md)（触发条件、命令、结果解释、隐私边界、评论限制与失败话术）。
+
 ## 能做什么 / 不做什么
 
 - ✅ 二维码登录（`login_v2` / passport 直连），凭据只存在 AstrBot 数据目录的 `plugin_data/astrbot_plugin_bili_scroll/bili_credential.json`
@@ -361,7 +363,8 @@ logic.py         纯函数：解析、字幕、JSON 提取、报告渲染、分�
 store.py         数据层：凭证、判重、日报、归档、状态、判断缓存（纯标准库）
 web_api.py       WebUI 插件页面后端：11 个端点（状态/扫码/轮询/跑一轮/预览/配置/日报/历史）
 pages/bili-panel/ WebUI 控制台页面（扫码、状态、跑一轮、预览评论、日报与历史）
-tests/           114 个单测（离线，不需要联网/不需要 B 站账号）
+BOT_GUIDE.md     给对话模型/执行助手看的操作规范
+tests/           190+ 个单测（离线，不需要联网/不需要 B 站账号）
 ```
 
 说明：

@@ -32,6 +32,7 @@ FORBIDDEN = re.compile(
 )
 USER_VISIBLE = [
     "README.md",
+    "BOT_GUIDE.md",
     "metadata.yaml",
     "_conf_schema.json",
     "CHANGELOG.md",
@@ -113,6 +114,7 @@ def main() -> None:
         "LICENSE",
         "NOTICE.md",
         "CHANGELOG.md",
+        "BOT_GUIDE.md",
         "manifest.json",
         "pages/bili-panel/index.html",
     ):
