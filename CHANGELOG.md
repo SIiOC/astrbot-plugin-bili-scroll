@@ -16,7 +16,6 @@
 - 控制台新增每轮/每日/同 UP/质量分/间隔/去重/最短字数设置，并修正 `comment_per_round` 的读写链
 - 日志统一从 `astrbot.api.logger` 获取，移除运行模块与测试里的 stdlib `logging` 直连；debug 级别通过 Star logger 设置
 - 发送记录上下文不再直接拼接 `req.system_prompt`：新宿主使用 `req.extra_user_content_parts` 的临时内容块（`.mark_as_temp()`），旧宿主回退到原 system prompt 追加，兼顾提示缓存与兼容性
-- 新增 [BOT_GUIDE.md](BOT_GUIDE.md)：面向对话模型/执行助手的插件使用说明书，覆盖触发条件、命令与工具、结果解释、隐私边界、评论/私信限制和失败话术
 
 ## 0.13.0 — 2026-10-24
 

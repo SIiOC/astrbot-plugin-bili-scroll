@@ -35,7 +35,6 @@ INCLUDE_FILES = [
     "metadata.yaml",
     "requirements.txt",
     "README.md",
-    "BOT_GUIDE.md",
     "LICENSE",
     "NOTICE.md",
     "CHANGELOG.md",
@@ -46,7 +45,6 @@ INCLUDE_DIRS = ["pages"]
 # 对外可见文件里不允许出现的其它项目名（NOTICE / LICENSE 属法律文件，单独放行）
 USER_VISIBLE = [
     "README.md",
-    "BOT_GUIDE.md",
     "metadata.yaml",
     "_conf_schema.json",
     "CHANGELOG.md",
