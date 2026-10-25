@@ -14,7 +14,7 @@ help: |
   自动运行需在插件配置里打开「每日自动刷」，并确认宿主平台支持主动消息
   （QQ 个人号 aiocqhttp / Telegram / WebChat / 飞书；QQ 官方 API 不支持）。
   评论与 @ 默认关闭：开启后会以登录的 B 站账号（通常是 bot 小号）发言，请先确认配额与 @ 对象。
-version: 0.13.0
+version: 0.14.0
 author: SIiOC
 repo: https://github.com/SIiOC/astrbot-plugin-bili-scroll
 display_name: 刷会儿B站

@@ -406,6 +406,16 @@ class WebApiTestCase(unittest.TestCase):
         )
         self.assertIn("llm_budget_per_day", " ".join(result["issues"]))
 
+    def test_comment_guard_zero_thresholds_preserved(self):
+        result = web_api.apply_config_updates(
+            self.plugin,
+            {"comment_min_score": 0, "comment_dedupe_pct": 0, "comment_per_round": 3},
+        )
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(self.plugin.cfg["comment_min_score"], 0)
+        self.assertEqual(self.plugin.cfg["comment_dedupe_pct"], 0)
+        self.assertEqual(self.plugin.cfg["comment_per_round"], 3)
+
     def test_apply_config_updates_rejects_bad_values(self):
         bad = web_api.apply_config_updates(
             self.plugin, {"dm_mode": "nope", "dm_share_mode": "nope", "run_at": "25:99", "debug": True}

@@ -283,6 +283,13 @@
           <label>自动运行时间<input id="cfgRunAt" placeholder="22:00" /></label>
           <label>要 @ 的昵称<input id="cfgMention" /></label>
           <label>评论字数上限<input id="cfgCommentLimit" type="number" min="20" max="150" /></label>
+          <label>每轮评论上限<input id="cfgCommentRound" type="number" min="1" max="3" /></label>
+          <label>每日评论上限<input id="cfgCommentDaily" type="number" min="1" max="20" /></label>
+          <label>每 UP 每日评论<input id="cfgCommentPerUp" type="number" min="1" max="3" /></label>
+          <label>评论最低内容质量分<input id="cfgCommentMinScore" type="number" min="0" max="100" /></label>
+          <label>评论间隔(秒)<input id="cfgCommentInterval" type="number" min="30" max="3600" /></label>
+          <label>评论去重阈值(%)<input id="cfgCommentDedupe" type="number" min="0" max="100" /></label>
+          <label>最短评论字数<input id="cfgCommentMinChars" type="number" min="2" max="80" /></label>
           <label>日报投递<select id="cfgDmMode">
             <option value="off">关闭（只推聊天）</option>
             <option value="only">只发 B 站私信</option>
@@ -946,7 +953,15 @@
             cfgMaxCandidates: c.max_candidates,
             cfgRunAt: c.run_at,
             cfgMention: c.mention_name,
+            cfgCommentBlocklist: c.comment_blocklist,
             cfgCommentLimit: c.comment_text_limit,
+            cfgCommentRound: c.comment_per_round,
+            cfgCommentDaily: c.comment_daily_limit,
+            cfgCommentPerUp: c.comment_per_up_daily,
+            cfgCommentMinScore: c.comment_min_score,
+            cfgCommentInterval: c.comment_min_interval_seconds,
+            cfgCommentDedupe: c.comment_dedupe_pct,
+            cfgCommentMinChars: c.comment_min_chars,
             cfgDmUid: c.dm_uid,
             cfgDmShareLimit: c.dm_share_limit,
             cfgDmShareDaily: c.dm_share_daily_limit,
@@ -991,7 +1006,6 @@
             cfgPushQQ: c.push_qq,
             cfgPersona: c.comment_use_persona,
             cfgCommentGuard: c.comment_guard_review,
-            cfgCommentBlocklist: c.comment_blocklist,
             cfgReadComments: c.read_comments,
             cfgProactiveShare: c.proactive_share,
           };
@@ -1014,6 +1028,13 @@
             run_at: $("cfgRunAt").value.trim(),
             mention_name: $("cfgMention").value.trim(),
             comment_text_limit: Number($("cfgCommentLimit").value || 150),
+            comment_per_round: Number($("cfgCommentRound").value || 1),
+            comment_daily_limit: Number($("cfgCommentDaily").value || 5),
+            comment_per_up_daily: Number($("cfgCommentPerUp").value || 1),
+            comment_min_score: Number($("cfgCommentMinScore").value === "" ? 75 : $("cfgCommentMinScore").value),
+            comment_min_interval_seconds: Number($("cfgCommentInterval").value || 120),
+            comment_dedupe_pct: Number($("cfgCommentDedupe").value === "" ? 85 : $("cfgCommentDedupe").value),
+            comment_min_chars: Number($("cfgCommentMinChars").value || 4),
             dm_mode: $("cfgDmMode").value,
             dm_share_mode: $("cfgDmShareMode").value,
             dm_uid: Number($("cfgDmUid").value || 0),
@@ -1091,7 +1112,7 @@
           });
           document
             .querySelectorAll(
-              "#cfgPerDay,#cfgLlm,#cfgRounds,#cfgMaxCandidates,#cfgRunAt,#cfgMention,#cfgCommentLimit,#cfgCommentBlocklist,#cfgNoSubtitlePolicy,#cfgDmMode,#cfgDmShareMode,#cfgDmUid,#cfgDmShareLimit,#cfgDmShareDaily,#cfgDmShareInterval,#cfgVisionFrames,#cfgVisionSeconds,#cfgPreferenceWeight,#cfgPickThreshold,#cfgRiskThreshold,#cfgProactiveIdle,#cfgProactiveMax,#cfgProactiveGap,#cfgMixKeywords,#cfgMixRecommend,#cfgMixPopular,#cfgAutoRun,#cfgNlTrigger,#cfgPeak,#cfgAutoComment,#cfgPushQQ,#cfgPersona,#cfgCommentGuard,#cfgReadComments,#cfgProactiveShare"
+              "#cfgPerDay,#cfgLlm,#cfgRounds,#cfgMaxCandidates,#cfgRunAt,#cfgMention,#cfgCommentLimit,#cfgCommentRound,#cfgCommentDaily,#cfgCommentPerUp,#cfgCommentMinScore,#cfgCommentInterval,#cfgCommentDedupe,#cfgCommentMinChars,#cfgCommentBlocklist,#cfgNoSubtitlePolicy,#cfgDmMode,#cfgDmShareMode,#cfgDmUid,#cfgDmShareLimit,#cfgDmShareDaily,#cfgDmShareInterval,#cfgVisionFrames,#cfgVisionSeconds,#cfgPreferenceWeight,#cfgPickThreshold,#cfgRiskThreshold,#cfgProactiveIdle,#cfgProactiveMax,#cfgProactiveGap,#cfgMixKeywords,#cfgMixRecommend,#cfgMixPopular,#cfgAutoRun,#cfgNlTrigger,#cfgPeak,#cfgAutoComment,#cfgPushQQ,#cfgPersona,#cfgCommentGuard,#cfgReadComments,#cfgProactiveShare"
             )
             .forEach((el) => {
               el.addEventListener("input", () => {

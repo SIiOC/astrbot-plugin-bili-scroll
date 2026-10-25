@@ -250,7 +250,43 @@
     "description": "每轮最多发几条评论",
     "type": "int",
     "default": 1,
-    "hint": "1–5。发完会尝试复核是否公开可见（回执成功 ≠ 公开可见）。"
+    "hint": "1–3（硬上限 3）。发完会尝试复核是否公开可见（回执成功 ≠ 公开可见）。"
+  },
+  "comment_daily_limit": {
+    "description": "每日评论上限",
+    "type": "int",
+    "default": 5,
+    "hint": "1–20（本地硬上限20），默认5。常规/主动/强制/测试入口共用；请求前占用次数，失败或结果未知不退额度。开源代码可被修改，此限制不是平台级保证。"
+  },
+  "comment_per_up_daily": {
+    "description": "同一 UP 每日评论上限",
+    "type": "int",
+    "default": 1,
+    "hint": "1–3。避免在同一位 UP 的视频下连续刷评论。"
+  },
+  "comment_min_score": {
+    "description": "评论最低内容质量分",
+    "type": "int",
+    "default": 75,
+    "hint": "0–100。使用内容质量 quality，而不是偏好加权综合分；喜欢某类视频不代表值得公开留言。默认75，模型分数仅辅助，不能保证评论质量。"
+  },
+  "comment_min_interval_seconds": {
+    "description": "两条评论最小间隔（秒）",
+    "type": "int",
+    "default": 120,
+    "hint": "30–3600。跨轮生效；小于该间隔会直接跳过本轮评论，避免连续刷评。"
+  },
+  "comment_min_chars": {
+    "description": "评论最短字数",
+    "type": "int",
+    "default": 4,
+    "hint": "2–80。过短（如「好看」「支持」）直接不发。"
+  },
+  "comment_dedupe_pct": {
+    "description": "评论去重相似度阈值（%）",
+    "type": "int",
+    "default": 85,
+    "hint": "1–100为近似匹配阈值；0只关闭模糊比较，完全重复始终拦截。与最近20条正文比较，不受@昵称影响。"
   },
   "comment_text_limit": {
     "description": "单条评论字数上限",

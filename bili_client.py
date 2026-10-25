@@ -438,6 +438,7 @@ class BiliClient:
         detail["title"] = str(info.get("title") or item.get("title") or "")
         detail["cover"] = str(info.get("pic") or item.get("cover") or "")
         detail["up"] = str((info.get("owner") or {}).get("name") or item.get("up") or "")
+        detail["up_uid"] = str((info.get("owner") or {}).get("mid") or item.get("up_uid") or "")
         desc = str(info.get("desc") or "").strip()
         if desc:
             detail["desc"] = desc[:1000]

@@ -54,8 +54,14 @@ _INT_KEYS: dict[str, tuple[int, int]] = {
     "per_day": (0, 999),
     "days": (1, 30),
     "max_candidates": (1, 100),
-    "comment_per_round": (1, 5),
+    "comment_per_round": (1, 3),
     "comment_text_limit": (20, 150),
+    "comment_daily_limit": (1, 20),
+    "comment_per_up_daily": (1, 3),
+    "comment_min_score": (0, 100),
+    "comment_min_interval_seconds": (30, 3600),
+    "comment_min_chars": (2, 80),
+    "comment_dedupe_pct": (0, 100),
     "llm_budget_per_day": (0, 100000),
     "rounds_per_day": (0, 100),
     "risk_abort_threshold": (1, 20),
@@ -438,6 +444,25 @@ class BiliScrollWebAPI:
                 "comment_text_limit": plugin._cfg_int(
                     "comment_text_limit", 150, minimum=20
                 ),
+                "comment_per_round": min(3, plugin._cfg_int("comment_per_round", 1, minimum=1)),
+                "comment_daily_limit": plugin._cfg_int(
+                    "comment_daily_limit", 5, minimum=1
+                ),
+                "comment_per_up_daily": plugin._cfg_int(
+                    "comment_per_up_daily", 1, minimum=1
+                ),
+                "comment_min_score": plugin._cfg_int(
+                    "comment_min_score", 75, minimum=0
+                ),
+                "comment_min_interval_seconds": plugin._cfg_int(
+                    "comment_min_interval_seconds", 120, minimum=30
+                ),
+                "comment_min_chars": plugin._cfg_int(
+                    "comment_min_chars", 4, minimum=2
+                ),
+                "comment_dedupe_pct": plugin._cfg_int(
+                    "comment_dedupe_pct", 85, minimum=0
+                ),
                 "push_qq": bool(plugin._cfg("push_qq", True)),
                 "dm_mode": str(plugin._cfg("dm_mode", "off") or "off"),
                 "dm_share_mode": str(plugin._cfg("dm_share_mode", "single") or "single"),
@@ -620,6 +645,12 @@ class BiliScrollWebAPI:
             return {"ok": False, "accepted": False, "message": "正在跑另一轮，等它结束再试"}
         if not plugin.client.has_credential():
             return {"ok": False, "accepted": False, "message": "还没登录，先扫码"}
+        if not bool(plugin._cfg("auto_comment", False)):
+            return {
+                "ok": False,
+                "accepted": False,
+                "message": "公开评论总开关 auto_comment 未开；主动分享也走评论通道，开启后才会发",
+            }
         if not str(plugin._cfg("mention_name", "") or "").strip():
             return {
                 "ok": False,

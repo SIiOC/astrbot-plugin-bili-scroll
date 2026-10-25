@@ -29,6 +29,8 @@ from .store import Store
 
 PLUGIN_NAME = "astrbot_plugin_bili_scroll"
 COMMENT_VERIFY_DELAY = 20  # 评论发出后等待多少秒再复核可见性（测试里可覆盖）
+COMMENT_HARD_DAILY_LIMIT = 20  # 无论配置怎么填，单账号每天最多评论数
+COMMENT_HARD_PER_ROUND = 3  # 无论配置怎么填，单轮最多评论数
 CANDIDATE_INTERVAL = 0.5  # 候选之间最小间隔（秒），降低 -412 风险
 
 
@@ -302,6 +304,8 @@ class BiliScrollPlugin(Star):
             return "busy"
         if not test and not bool(self._cfg("proactive_share", False)):
             return "disabled"
+        if not bool(self._cfg("auto_comment", False)):
+            return "comments_disabled"
         mention = str(self._cfg("mention_name", "") or "").strip()
         if not mention:
             return "no_mention"
@@ -438,38 +442,16 @@ class BiliScrollPlugin(Star):
                 if not verdict["ok"] or not verdict["worth"]:
                     seen_entries.append((detail["bvid"], today, "跳过（判断不值得）"))
                     continue
-                text = await self._make_comment_text(
-                    detail, mention, verdict["one_liner"], self._umo, share=True
-                )
-                if not text:
+                candidate = {**detail, **verdict, "visual": visual}
+                status, _result = await self._post_guarded_comment(self._umo, candidate, share=True)
+                if status != "posted":
+                    self.logger.info("[bili-scroll] 主动评论未发：%s (%s)", detail["bvid"], status)
+                    if status in {"disabled", "state_error", "post_failed", "cooldown", "daily_limit", "interval", "legacy_history_unattributed"}:
+                        break
                     continue
-                result = await self.client.post_comment(detail, text)
-                visible = False
-                rpid = result.get("rpid") if isinstance(result, dict) else None
-                if rpid:
-                    try:
-                        await asyncio.sleep(COMMENT_VERIFY_DELAY)
-                        visible = await self.client.comment_visible(detail, rpid)
-                    except Exception as exc:  # noqa: BLE001
-                        self.logger.warning("[bili-scroll] 主动评论复核失败：%s", exc)
-                picked.append({**detail, **verdict})
+                picked.append(candidate)
                 seen_entries.append((detail["bvid"], today, "主动分享"))
-                self._record_sent(
-                    "comment",
-                    detail["bvid"],
-                    [detail],
-                    extra={
-                        "source": "proactive",
-                        "bvid": detail.get("bvid", ""),
-                        "rpid": rpid,
-                        "text": text,
-                        "mention": mention,
-                        "visible": bool(visible),
-                    },
-                )
-                self.logger.info(
-                    "[bili-scroll] 主动分享：%s《%s》评论=%s", detail["bvid"], detail.get("title", ""), text[:60]
-                )
+                self.logger.info("[bili-scroll] 主动分享：%s《%s》", detail["bvid"], detail.get("title", ""))
                 break
 
             if seen_entries:
@@ -614,6 +596,8 @@ class BiliScrollPlugin(Star):
             name = str(((info or {}).get("name") or "")).strip()
             login_text = f"已登录：{name}" if name else "已登录"
             if name:
+                # self_info 期间可能有评论/LLM记账，不可回写 await 前的旧快照。
+                state = self.store.load_state()
                 state["login_name"] = name
                 state["login_name_ts"] = int(datetime.now().timestamp())
                 self.store.save_state(state)
@@ -1295,10 +1279,11 @@ class BiliScrollPlugin(Star):
         limit: int,
         forbidden_terms: list[str],
         umo: str,
+        item: dict | None = None,
     ) -> str:
         """兜底文案也要过发送前复核；不通过就宁可不发。"""
         allowed, reason = await self._review_comment(
-            body, forbidden_terms, umo=umo
+            body, forbidden_terms, umo=umo, item=item
         )
         if not allowed:
             self.logger.warning(
@@ -1319,18 +1304,17 @@ class BiliScrollPlugin(Star):
         fallback_body = logic.clean_comment_text(one_liner, limit)
         if not logic.is_safe_comment(fallback_body, limit, forbidden_terms):
             self.logger.warning(
-                "[bili-scroll] 兜底评论含可疑内容，改用中性文案：%s", fallback_body[:60]
+                "[bili-scroll] 兜底评论含可疑内容，直接跳过：%s", fallback_body[:60]
             )
-            fallback_body = "这条看着还行，先收藏了"
-        fallback = logic.render_comment(mention, fallback_body, limit)
+            return ""
         if not bool(self._cfg("comment_use_persona", True)):
             return await self._fallback_comment(
-                mention, fallback_body, limit, forbidden_terms, umo
+                mention, fallback_body, limit, forbidden_terms, umo, item
             )
         persona = await self._persona_prompt(umo)
         if not persona:
             return await self._fallback_comment(
-                mention, fallback_body, limit, forbidden_terms, umo
+                mention, fallback_body, limit, forbidden_terms, umo, item
             )
         self.logger.info(
             "[bili-scroll] 用人设生成评论（人设 %s 字，上限 %s 字）", len(persona), limit
@@ -1358,11 +1342,11 @@ class BiliScrollPlugin(Star):
         except Exception as exc:  # noqa: BLE001
             self.logger.warning("[bili-scroll] 人设评论生成失败，回退一句话：%s", exc)
             return await self._fallback_comment(
-                mention, fallback_body, limit, forbidden_terms, umo
+                mention, fallback_body, limit, forbidden_terms, umo, item
             )
         if not body:
             return await self._fallback_comment(
-                mention, fallback_body, limit, forbidden_terms, umo
+                mention, fallback_body, limit, forbidden_terms, umo, item
             )
         if not logic.is_safe_comment(body, limit, forbidden_terms):
             self.logger.warning(
@@ -1370,7 +1354,7 @@ class BiliScrollPlugin(Star):
             )
             return ""
         allowed, review_reason = await self._review_comment(
-            body, forbidden_terms, umo=umo
+            body, forbidden_terms, umo=umo, item=item
         )
         if not allowed:
             self.logger.warning(
@@ -1380,12 +1364,12 @@ class BiliScrollPlugin(Star):
         return logic.render_comment(mention, body, limit)
 
     async def _review_comment(
-        self, body: str, forbidden_terms: list[str], *, umo: str
+        self, body: str, forbidden_terms: list[str], *, umo: str, item: dict | None = None
     ) -> tuple[bool, str]:
         """发送前的模型复核：查真实姓名/个人信息、拉踩攻击、引流。失败按不通过处理。"""
         if not bool(self._cfg("comment_guard_review", True)):
             return True, "未启用复核"
-        system, user = logic.build_comment_review_prompt(body, forbidden_terms)
+        system, user = logic.build_comment_review_prompt(body, forbidden_terms, item=item)
         try:
             response = await self._llm_generate(
                 umo=umo,
@@ -1402,65 +1386,207 @@ class BiliScrollPlugin(Star):
         # 只接受 JSON 布尔 true；字符串 "false"/"0" 一律按不通过处理（fail closed）
         return payload.get("safe") is True, str(payload.get("reason") or "")[:80]
 
-    # ---------------- 评论（默认关） ----------------
-    async def _maybe_comment(self, umo: str, picked: list[dict]) -> None:
+    # ---------------- 所有公开评论共用的唯一写网关 ----------------
+    def _comment_limits(self) -> dict:
+        return {
+            "daily": min(COMMENT_HARD_DAILY_LIMIT, self._cfg_int("comment_daily_limit", 5, minimum=1)),
+            "per_up": min(3, self._cfg_int("comment_per_up_daily", 1, minimum=1)),
+            "quality": min(100, self._cfg_int("comment_min_score", 75)),
+            "interval": min(3600, self._cfg_int("comment_min_interval_seconds", 120, minimum=30)),
+            "chars": min(80, self._cfg_int("comment_min_chars", 4, minimum=2)),
+            "similarity": min(100, self._cfg_int("comment_dedupe_pct", 85)),
+        }
+
+    def _comment_snapshot(self, now: datetime, mention: str) -> tuple[dict, dict, dict]:
+        """严格读账本，并从旧 commented 记录保守恢复当日配额；无 await。"""
+        state = self.store.load_state(strict=True)
+        commented = state.get("commented", {})
+        old = state.get("comment_guard", {})
+        if not isinstance(commented, dict) or not isinstance(old, dict):
+            raise ValueError("评论账本结构异常，暂停公开评论")
+        if not isinstance(old.get("up", {}), dict) or not isinstance(old.get("texts", []), list):
+            raise ValueError("评论配额结构异常，暂停公开评论")
+        today = now.strftime("%Y-%m-%d")
+        same_day = old.get("date") == today
+        guard = {
+            "date": today,
+            "count": max(0, int(old.get("count", 0))) if same_day else 0,
+            "last_ts": max(0.0, float(old.get("last_ts", 0))),
+            "up": dict(old.get("up", {})) if same_day else {},
+            "texts": [str(x) for x in old.get("texts", [])][-20:],
+            "unknown_up": max(0, int(old.get("unknown_up", 0))) if same_day else 0,
+        }
+        recovered_count = 0
+        recovered_up: dict[str, int] = {}
+        unknown_up = 0
+        recovered_texts = []
+        for record in commented.values():
+            if not isinstance(record, dict):
+                raise ValueError("评论历史记录异常，暂停公开评论")
+            stamp = record.get("ts")
+            if stamp is None:
+                recorded_at = datetime.fromisoformat(str(record.get("date") or ""))
+                stamp = recorded_at.timestamp()
+            stamp = float(stamp)
+            guard["last_ts"] = max(guard["last_ts"], stamp)
+            body = record.get("body") or logic.comment_body(
+                record.get("text", ""), str(record.get("mention") or mention)
+            )
+            if body:
+                recovered_texts.append((stamp, str(body)))
+            if datetime.fromtimestamp(stamp).strftime("%Y-%m-%d") != today:
+                continue
+            recovered_count += 1
+            up_key = str(record.get("up_key") or "")
+            if not up_key:
+                unknown_up += 1
+            else:
+                recovered_up[up_key] = recovered_up.get(up_key, 0) + 1
+        guard["count"] = max(guard["count"], recovered_count)
+        guard["unknown_up"] = max(guard["unknown_up"], unknown_up)
+        for up_key, count in recovered_up.items():
+            guard["up"][up_key] = max(int(guard["up"].get(up_key, 0)), count)
+        for _, body in sorted(recovered_texts)[-20:]:
+            if body not in guard["texts"]:
+                guard["texts"].append(body)
+        guard["texts"] = guard["texts"][-20:]
+        return state, guard, dict(commented)
+
+    def _comment_gate_reason(self, state: dict, guard: dict, commented: dict,
+                             item: dict, now: datetime, limits: dict) -> str:
+        if not bool(self._cfg("auto_comment", False)):
+            return "disabled"
+        if max(float(state.get("comment_cooldown_until") or 0),
+               float(state.get("cooldown_until") or 0)) > now.timestamp():
+            return "cooldown"
+        bvid = str(item.get("bvid") or "")
+        if not bvid or bvid in commented:
+            return "duplicate_video"
+        if guard["count"] >= limits["daily"]:
+            return "daily_limit"
+        if guard["unknown_up"]:
+            return "legacy_history_unattributed"
+        if guard["last_ts"] and now.timestamp() - guard["last_ts"] < limits["interval"]:
+            return "interval"
+        up_key = self._comment_up_key(item)
+        if not up_key:
+            return "missing_up"
+        if int(guard["up"].get(up_key, 0)) >= limits["per_up"]:
+            return "up_limit"
+        # 推荐偏好分不能代替内容质量：关键词100分也不能把劣质视频抬过评论门槛。
+        if float(item.get("quality", 0)) < limits["quality"]:
+            return "quality"
+        return ""
+
+    @staticmethod
+    def _comment_up_key(item: dict) -> str:
+        uid = str(item.get("up_uid") or "").strip()
+        return f"uid:{uid}" if uid else str(item.get("up") or "").strip()
+
+    async def _post_guarded_comment(self, umo: str, item: dict, *, share: bool = False) -> tuple[str, dict]:
+        """唯一 post_comment 调用点；先记 pending，再写网络，未知结果永不自动重发。"""
+        if not bool(self._cfg("auto_comment", False)):
+            return "disabled", {}
         mention = str(self._cfg("mention_name", "") or "").strip()
         if not mention:
-            await self._push(umo, "自动评论已开启但没填「要 @ 的 B 站昵称」，本轮不发评论。")
-            return
-        per_round = max(1, min(5, self._cfg_int("comment_per_round", 1, minimum=1)))
-        state = self.store.load_state()
-        commented = dict(state.get("commented") or {})
+            return "no_mention", {}
+        lock = getattr(self, "_public_comment_lock", None)
+        if lock is None:
+            lock = self._public_comment_lock = asyncio.Lock()
+        async with lock:
+            limits = self._comment_limits()
+            try:
+                now = datetime.now()
+                state, guard, commented = self._comment_snapshot(now, mention)
+                reason = self._comment_gate_reason(state, guard, commented, item, now, limits)
+            except (OSError, ValueError, TypeError, OverflowError) as exc:
+                self.logger.warning("[bili-scroll] 评论账本不可用，禁止发评：%s", exc)
+                return "state_error", {}
+            if reason:
+                return reason, {}
+            one_liner = str(item.get("one_liner") or "").strip()
+            if len(one_liner) < 4:
+                return "insufficient_content", {}
+            text = await self._make_comment_text(item, mention, one_liner, umo, share=share)
+            body = logic.comment_body(text, mention)
+            if not text or logic.comment_is_generic(body, limits["chars"]):
+                return "generic", {}
+            # 生成/审核可能花几十秒，重读最新状态，跨午夜、LLM额度与状态查询都不能回滚账本。
+            try:
+                now = datetime.now()
+                state, guard, commented = self._comment_snapshot(now, mention)
+                reason = self._comment_gate_reason(state, guard, commented, item, now, limits)
+                if reason:
+                    return reason, {}
+                if logic.comment_too_similar(body, guard["texts"], limits["similarity"]):
+                    return "duplicate_text", {}
+                bvid = str(item["bvid"])
+                up_key = self._comment_up_key(item)
+                guard["count"] += 1  # 写尝试也占配额：失败/超时/取消都不归还。
+                guard["last_ts"] = now.timestamp()
+                guard["up"][up_key] = int(guard["up"].get(up_key, 0)) + 1
+                guard["texts"] = (guard["texts"] + [body])[-20:]
+                commented[bvid] = {
+                    "status": "pending", "rpid": None, "date": now.isoformat(timespec="seconds"),
+                    "ts": now.timestamp(), "text": text, "body": body,
+                    "mention": mention, "up_key": up_key,
+                }
+                state["comment_guard"] = guard
+                state["commented"] = commented
+                self.store.save_state(state)  # 失败则绝不发送。
+            except (OSError, ValueError, TypeError, OverflowError) as exc:
+                self.logger.warning("[bili-scroll] 评论预约落盘失败，禁止发评：%s", exc)
+                return "state_error", {}
+            try:
+                result = await self.client.post_comment(item, text)
+            except (Exception, asyncio.CancelledError) as exc:
+                try:
+                    latest = self.store.load_state(strict=True)
+                    latest["commented"][bvid]["status"] = "unknown"
+                    latest["comment_cooldown_until"] = datetime.now().timestamp() + 1800
+                    self.store.save_state(latest)
+                except (OSError, ValueError, TypeError, KeyError):
+                    pass  # pending 已经持久化；仍然占额度/去重，不能误当成未发送。
+                if isinstance(exc, asyncio.CancelledError):
+                    raise
+                self.logger.warning("[bili-scroll] 发评结果未知，暂停公开评论30分钟：%s", exc)
+                return "post_failed", {}
+            result = result if isinstance(result, dict) else {}
+            try:
+                latest = self.store.load_state(strict=True)
+                latest["commented"][bvid].update({"status": "submitted", "rpid": result.get("rpid")})
+                self.store.save_state(latest)
+            except (OSError, ValueError, TypeError, KeyError) as exc:
+                self.logger.warning("[bili-scroll] 已提交评论，结果记账失败，保留预约：%s", exc)
+            self._record_sent("comment", bvid, [item], extra={
+                "source": "proactive" if share else "round", "bvid": bvid,
+                "rpid": result.get("rpid"), "text": text, "mention": mention,
+                "visible": False, "delivery": "submitted",
+            })
+            visible = False
+            if result.get("rpid"):
+                try:
+                    await asyncio.sleep(COMMENT_VERIFY_DELAY)
+                    visible = await self.client.comment_visible(item, result["rpid"])
+                except Exception as exc:
+                    self.logger.info("[bili-scroll] 评论可见性尚未确认：%s", exc)
+            return "posted", {**result, "text": text, "visible": bool(visible)}
+
+    async def _maybe_comment(self, umo: str, picked: list[dict]) -> None:
+        per_round = min(COMMENT_HARD_PER_ROUND, self._cfg_int("comment_per_round", 1, minimum=1))
         sent = 0
         for item in picked:
             if sent >= per_round:
                 break
-            if item["bvid"] in commented:
-                continue
-            one_liner = str(item.get("one_liner") or "").strip()
-            if len(one_liner) < 4:  # 避免只发一条「@昵称」
-                continue
-            text = await self._make_comment_text(item, mention, one_liner, umo)
-            if not text:
-                continue
-            try:
-                result = await self.client.post_comment(item, text)
-            except Exception as exc:  # noqa: BLE001
-                await self._push(umo, f"评论失败（{item['bvid']}）：{exc}")
-                continue
-            sent += 1
-            commented[item["bvid"]] = {
-                "rpid": result.get("rpid"),
-                "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "text": text,
-            }
-            state["commented"] = commented
-            self.store.save_state(state)
-            await self._push(umo, f"已在 {item['bvid']} 下评论并 @ 你：{text}")
-            visible = False
-            if result.get("rpid"):
-                await asyncio.sleep(COMMENT_VERIFY_DELAY)
-                try:
-                    visible = await self.client.comment_visible(item, result["rpid"])
-                except Exception:  # noqa: BLE001
-                    visible = False
-                await self._push(
-                    umo,
-                    f"评论复核（{item['bvid']}，rpid={result['rpid']}）："
-                    + ("公开可见" if visible else "暂未复核到（可能延迟，回执成功不等于公开可见）"),
-                )
-            self._record_sent(
-                "comment",
-                item["bvid"],
-                [],
-                extra={
-                    "bvid": item["bvid"],
-                    "rpid": result.get("rpid"),
-                    "text": text,
-                    "mention": mention,
-                    "visible": bool(visible),
-                },
-            )
+            status, result = await self._post_guarded_comment(umo, item)
+            if status == "posted":
+                sent += 1
+                await self._push(umo, f"已提交 {item['bvid']} 下的评论并 @ 你：{result['text']}\n"
+                                 + ("复核公开可见" if result["visible"] else "暂未确认公开可见"))
+            else:
+                self.logger.info("[bili-scroll] 评论未发：%s (%s)", item.get("bvid"), status)
+                if status in {"disabled", "no_mention", "state_error", "post_failed", "cooldown", "daily_limit", "interval", "legacy_history_unattributed"}:
+                    break
 
     # ---------------- 推送 ----------------
     async def _push_report(

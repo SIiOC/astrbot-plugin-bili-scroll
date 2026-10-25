@@ -182,7 +182,7 @@ class FakeContext:
         if self.llm_error:
             raise RuntimeError("provider unavailable")
         self.llm_prompts.append(prompt)
-        if system_prompt and "评论安全审核员" in system_prompt:
+        if system_prompt and "评论安全" in system_prompt:
             self.guard_calls += 1
             text = self.guard_reply or '{"safe": true, "reason": "ok"}'
             return SimpleNamespace(completion_text=text)
@@ -198,7 +198,7 @@ class FakeContext:
             if marker in prompt:
                 worth = value
         text = (
-            '{"worth": true, "reason": "有实操细节", "one_liner": "这条值得看"}'
+            '{"worth": true, "reason": "有实操细节", "one_liner": "这段转场和配乐衔接得很自然"}'
             if worth
             else '{"worth": false, "reason": "旧闻", "one_liner": ""}'
         )
@@ -237,6 +237,7 @@ def make_item(bvid, title):
         "play": 1000,
         "desc": "简介",
         "url": f"https://www.bilibili.com/video/{bvid}",
+        "score": 90,
     }
 
 
@@ -395,7 +396,7 @@ class TestRoundFlow(unittest.TestCase):
         # 判断结果给一个过短的 one_liner（<4 字），不应发出只含 @昵称 的评论
         original = plugin.context.llm_generate
 
-        async def short_llm(chat_provider_id, prompt, system_prompt=None):
+        async def short_llm(chat_provider_id, prompt, system_prompt=None, image_urls=None):
             return SimpleNamespace(
                 completion_text='{"worth": true, "reason": "有实操", "one_liner": "好"}'
             )
@@ -583,7 +584,7 @@ class TestRoundFlow(unittest.TestCase):
         )
         asyncio.run(plugin._run_round("test:FriendMessage:1"))
         self.assertEqual(len(client.posted), 1)
-        self.assertIn("这条值得看", client.posted[0][1])
+        self.assertIn("这段转场和配乐衔接得很自然", client.posted[0][1])
         self.assertEqual(plugin.context.comment_calls, [])
 
     def test_comment_persona_off_keeps_one_liner(self):
@@ -593,7 +594,7 @@ class TestRoundFlow(unittest.TestCase):
             {"auto_comment": True, "mention_name": "主号", "comment_use_persona": False}
         )
         asyncio.run(plugin._run_round("test:FriendMessage:1"))
-        self.assertEqual(client.posted[0][1], "@主号 这条值得看")
+        self.assertEqual(client.posted[0][1], "@主号 这段转场和配乐衔接得很自然")
         self.assertEqual(plugin.context.comment_calls, [])
 
     def test_comment_fallback_reviewed(self):
@@ -665,6 +666,104 @@ class TestRoundFlow(unittest.TestCase):
                 "mention_name": "主号",
                 "comment_use_persona": True,
                 "comment_blocklist": "张三, 李四",
+            }
+        )
+        asyncio.run(plugin._run_round("test:FriendMessage:1"))
+        self.assertEqual(client.posted, [])
+
+    def test_comment_daily_guard_blocks(self):
+        item = make_item("BV1NXH661EpG", "值得看的")
+        plugin, client = self._plugin([item], {item["bvid"]: "字幕" * 20})
+        today = datetime.now().strftime("%Y-%m-%d")
+        plugin.store.save_state(
+            {"comment_guard": {"date": today, "count": 1, "last_ts": 0, "up": {}, "texts": []}}
+        )
+        plugin.cfg.update(
+            {
+                "auto_comment": True,
+                "mention_name": "主号",
+                "comment_daily_limit": 1,
+            }
+        )
+        asyncio.run(plugin._run_round("test:FriendMessage:1"))
+        self.assertEqual(client.posted, [])
+
+    def test_comment_min_score_blocks(self):
+        item = make_item("BV1NXH661EpG", "低分视频")
+        item["score"] = 50
+        plugin, client = self._plugin([item], {item["bvid"]: "字幕" * 20})
+        plugin.cfg.update(
+            {
+                "auto_comment": True,
+                "mention_name": "主号",
+                "comment_min_score": 100,
+            }
+        )
+        asyncio.run(plugin._run_round("test:FriendMessage:1"))
+        self.assertEqual(client.posted, [])
+
+    def test_comment_generic_text_blocks(self):
+        item = make_item("BV1NXH661EpG", "值得看的")
+        plugin, client = self._plugin([item], {item["bvid"]: "字幕" * 20})
+        plugin.context.comment_reply = "好看"
+        plugin.cfg.update(
+            {
+                "auto_comment": True,
+                "mention_name": "主号",
+                "comment_use_persona": True,
+                "comment_min_chars": 4,
+            }
+        )
+        asyncio.run(plugin._run_round("test:FriendMessage:1"))
+        self.assertEqual(client.posted, [])
+
+    def test_comment_duplicate_text_blocks(self):
+        item = make_item("BV1NXH661EpG", "值得看的")
+        plugin, client = self._plugin([item], {item["bvid"]: "字幕" * 20})
+        today = datetime.now().strftime("%Y-%m-%d")
+        plugin.store.save_state(
+            {
+                "comment_guard": {
+                    "date": today,
+                    "count": 0,
+                    "last_ts": 0,
+                    "up": {},
+                    "texts": ["这段转场和配乐衔接得很自然"],
+                }
+            }
+        )
+        plugin.context.comment_reply = "这段转场和配乐衔接得很自然"
+        plugin.cfg.update(
+            {
+                "auto_comment": True,
+                "mention_name": "主号",
+                "comment_use_persona": True,
+                "comment_dedupe_pct": 85,
+            }
+        )
+        asyncio.run(plugin._run_round("test:FriendMessage:1"))
+        self.assertEqual(client.posted, [])
+
+    def test_comment_per_up_guard_blocks(self):
+        item = make_item("BV1NXH661EpG", "值得看的")
+        plugin, client = self._plugin([item], {item["bvid"]: "字幕" * 20})
+        today = datetime.now().strftime("%Y-%m-%d")
+        plugin.store.save_state(
+            {
+                "comment_guard": {
+                    "date": today,
+                    "count": 0,
+                    "last_ts": 0,
+                    "up": {"UP主": 1},
+                    "texts": [],
+                }
+            }
+        )
+        plugin.cfg.update(
+            {
+                "auto_comment": True,
+                "mention_name": "主号",
+                "comment_per_up_daily": 1,
             }
         )
         asyncio.run(plugin._run_round("test:FriendMessage:1"))
@@ -881,11 +980,8 @@ class TestRoundFlow(unittest.TestCase):
             {"auto_comment": True, "mention_name": "主号", "comment_use_persona": False}
         )
         asyncio.run(plugin._run_round("test:FriendMessage:1"))
-        text = client.posted[0][1]
-        self.assertTrue(text.startswith("@主号 "))
-        self.assertNotIn("http", text)
-        self.assertNotIn("忽略以上", text)
-        self.assertIn("先收藏", text)
+        # 不得把不可信素材改成空泛中性模板再强行公开发送。
+        self.assertEqual(client.posted, [])
 
     def test_comment_limit_clamped_to_150(self):
         item = make_item("BV1NXH661EpG", "值得看的")
@@ -972,6 +1068,7 @@ class TestProactiveShare(unittest.TestCase):
             "llm_budget_per_day": 100,
             "risk_abort_threshold": 3,
             "proactive_share": True,
+            "auto_comment": True,
             "proactive_idle_minutes": 30,
             "proactive_max_per_day": 2,
             "proactive_min_gap_minutes": 120,

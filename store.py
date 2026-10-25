@@ -88,11 +88,25 @@ class Store:
             pass
 
     # ---------- 运行状态 ----------
-    def load_state(self) -> dict:
-        data = self._read_json(self.state_file, {})
-        return data if isinstance(data, dict) else {}
+    def load_state(self, *, strict: bool = False) -> dict:
+        try:
+            data = json.loads(self.state_file.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError("运行状态必须是 JSON 对象；暂停公开评论")
+        except FileNotFoundError:
+            return {}
+        except (OSError, ValueError):
+            self._state_read_failed = True
+            if strict:
+                raise
+            return {}
+        self._state_read_failed = False
+        return data
 
     def save_state(self, state: dict) -> None:
+        # 普通读取失败后的空字典也不能覆盖原账本，把已用额度洗成零。
+        if getattr(self, "_state_read_failed", False):
+            raise ValueError("运行状态读取失败，禁止覆盖；请修复状态文件后重新读取")
         self._write_json(self.state_file, state)
 
     # ---------- 判重表 ----------
@@ -137,7 +151,7 @@ class Store:
 
     # ---------- 已发送记录（给 bot 回忆用） ----------
     def append_sent(self, entry: dict) -> None:
-        """追加一条发送记录（JSONL，一行一条；append-only，保留最近 5000 条）。"""
+        """追加发送记录并保留最近 5000 条（JSONL，一行一条）。"""
         if not isinstance(entry, dict) or not entry:
             return
         line = json.dumps(entry, ensure_ascii=False)

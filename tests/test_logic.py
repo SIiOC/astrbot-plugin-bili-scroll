@@ -556,11 +556,19 @@ class TestNaturalLanguageTrigger(unittest.TestCase):
 
     def test_comment_review_prompt(self):
         system, user = logic.build_comment_review_prompt("这条不错", ["张三"])
-        self.assertIn("评论安全审核员", system)
+        self.assertIn("评论安全", system)
         self.assertIn("真实姓名", system)
         self.assertIn("拉踩", system)
         # 禁词可能含真实姓名，不能为了复核再上传给模型
         self.assertNotIn("张三", user)
+
+    def test_comment_quality_gate(self):
+        self.assertTrue(logic.comment_is_generic("好看"))
+        self.assertTrue(logic.comment_is_generic("哈哈哈哈哈哈"))
+        self.assertFalse(logic.comment_is_generic("这段编舞动作很齐，收藏了"))
+        recent = ["这段编舞动作很齐，收藏了"]
+        self.assertTrue(logic.comment_too_similar("这段编舞动作很齐，收藏了", recent, 85))
+        self.assertFalse(logic.comment_too_similar("这个转场和配乐衔接得不错", recent, 85))
 
     # ---------- 首页推荐流 / 主动分享 ----------
     def test_normalize_homepage_item(self):
