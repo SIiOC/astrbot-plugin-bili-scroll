@@ -14,6 +14,8 @@
 - 发送前复核 prompt 增加空泛/模板化/与视频无关的低质量评论拦截，并传入视频公开素材供判断；启用复核时失败或非布尔 `true` 一律不发；关闭人设或调用失败/空输出时回退得到的一句话备选仍受本地过滤、质量、去重与配额闸门约束
 - 修复 `bili_status` 在 `self_info` 等待后回写旧状态、可能覆盖评论账本的问题；评论生成后重读最新状态，跨午夜按新日期记账
 - 控制台新增每轮/每日/同 UP/质量分/间隔/去重/最短字数设置，并修正 `comment_per_round` 的读写链
+- 日志统一从 `astrbot.api.logger` 获取，移除运行模块与测试里的 stdlib `logging` 直连；debug 级别通过 Star logger 设置
+- 发送记录上下文不再直接拼接 `req.system_prompt`：新宿主使用 `req.extra_user_content_parts` 的临时内容块（`.mark_as_temp()`），旧宿主回退到原 system prompt 追加，兼顾提示缓存与兼容性
 
 ## 0.13.0 — 2026-10-24
 

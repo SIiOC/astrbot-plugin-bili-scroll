@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import atexit
-import logging
 import os
 import shutil
 import sys
@@ -66,8 +65,10 @@ atexit.register(shutil.rmtree, _TEST_DATA_ROOT, ignore_errors=True)
 
 try:
     from astrbot_plugin_bili_scroll import main  # noqa: E402
+    from astrbot.api import logger as main_api_logger  # noqa: E402
 except Exception:  # noqa: BLE001  导入失败（没有 AstrBot 源码）时跳过本模块
     main = None
+    main_api_logger = None
 
 from astrbot_plugin_bili_scroll.store import Store  # noqa: E402
 
@@ -221,7 +222,7 @@ def make_plugin(tmpdir, cfg, client, verdicts):
     plugin._login_task = None
     plugin._loop_task = None
     plugin._proactive_task = None
-    plugin.logger = logging.getLogger("bili-scroll-test")
+    plugin.logger = main_api_logger
     return plugin
 
 
@@ -1045,6 +1046,27 @@ class TestRoundFlow(unittest.TestCase):
         group_denied = asyncio.run(tool.run(group_owner))
         self.assertIn("群聊", group_denied)
         self.assertNotIn("BV1NXH661EpG", group_denied)
+
+    def test_sent_context_appended_as_temp_part(self):
+        item = make_item("BV1NXH661EpG", "值得看的")
+        plugin, _client = self._plugin([item], {item["bvid"]: "字幕" * 20})
+        plugin.cfg["inject_sent_context"] = True
+        plugin._umo = "test:FriendMessage:1"
+        asyncio.run(plugin._run_round("test:FriendMessage:1"))
+
+        owner_event = SimpleNamespace(unified_msg_origin="test:FriendMessage:1")
+        request = SimpleNamespace(
+            system_prompt="基础提示", extra_user_content_parts=[]
+        )
+        asyncio.run(plugin.on_llm_request(owner_event, request))
+        # 不再改动 system_prompt，避免破坏宿主提示缓存。
+        self.assertEqual(request.system_prompt, "基础提示")
+        self.assertEqual(len(request.extra_user_content_parts), 1)
+        part = request.extra_user_content_parts[0]
+        self.assertIn("发送记录", part.text)
+        self.assertIn("值得看的", part.text)
+        if hasattr(part, "model_dump_for_context"):
+            self.assertTrue(part.model_dump_for_context().get("_no_save"))
 
 
 class TestProactiveShare(unittest.TestCase):

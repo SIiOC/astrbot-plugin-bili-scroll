@@ -11,16 +11,16 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import logging
 import re
 import time
 from datetime import datetime, timedelta
+
+from astrbot.api import logger as _LOGGER
 
 from . import logic
 from .bili_client import NotLoggedInError
 
 PLUGIN_NAME = "astrbot_plugin_bili_scroll"
-_LOGGER = logging.getLogger(__name__)
 
 ROUTE_SPECS: tuple[tuple[str, str, list[str], str], ...] = (
     ("status", "get_status", ["GET"], "登录状态与今日统计"),

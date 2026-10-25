@@ -14,6 +14,14 @@ WORKSPACE_DIR = os.path.dirname(PLUGIN_DIR)
 if WORKSPACE_DIR not in sys.path:
     sys.path.insert(0, WORKSPACE_DIR)
 
+# bili_client 现在通过 astrbot.api 取日志；没有宿主源码时整组跳过。
+for _env in ("ASTRBOT_SRC", "ASTRBOT_ROOT"):
+    _root = os.environ.get(_env, "")
+    if _root and os.path.isdir(os.path.join(_root, "astrbot")):
+        if _root not in sys.path:
+            sys.path.insert(0, _root)
+        break
+
 
 import types  # noqa: E402
 
@@ -22,7 +30,12 @@ if "astrbot_plugin_bili_scroll" not in sys.modules:
     _pkg.__path__ = [PLUGIN_DIR]  # type: ignore[attr-defined]
     sys.modules["astrbot_plugin_bili_scroll"] = _pkg
 
-from astrbot_plugin_bili_scroll import bili_client  # noqa: E402
+try:
+    from astrbot_plugin_bili_scroll import bili_client  # noqa: E402
+except ModuleNotFoundError as exc:
+    if exc.name == "astrbot":
+        raise unittest.SkipTest("未找到 AstrBot 源码；跳过 bili_client 测试") from exc
+    raise
 from astrbot_plugin_bili_scroll.bili_client import (  # noqa: E402
     QR_STATE_TEXT,
     BiliClient,

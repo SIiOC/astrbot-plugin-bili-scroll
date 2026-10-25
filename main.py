@@ -23,6 +23,11 @@ from astrbot.api.message_components import Plain
 from astrbot.api.star import Context, Star
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
+try:  # 新版本才有临时内容块；旧版本回退到 system_prompt 追加
+    from astrbot.core.agent.message import TextPart
+except Exception:  # noqa: BLE001
+    TextPart = None
+
 from . import logic, vision
 from .bili_client import BiliClient, NotLoggedInError
 from .store import Store
@@ -103,9 +108,7 @@ class BiliScrollPlugin(Star):
         except Exception as exc:  # noqa: BLE001
             self.logger.warning("[bili-scroll] 清理抽帧临时文件失败：%s", exc)
         if bool(self._cfg("debug", False)):
-            import logging as _logging
-
-            _logging.getLogger("astrbot_plugin_bili_scroll").setLevel(_logging.DEBUG)
+            self.logger.setLevel("DEBUG")
             self.logger.info("[bili-scroll] debug=true，已开启调试日志")
         self._loop_task = asyncio.create_task(self._auto_loop())
         state = self.store.load_state()
@@ -498,7 +501,17 @@ class BiliScrollPlugin(Star):
             entries = self.store.recent_sent(days=days, limit=30)
             text = logic.build_sent_context(entries, today=today)
             if text:
-                req.system_prompt = (req.system_prompt or "") + "\n\n" + text
+                # 优先作为仅本回合可见的追加内容，避免改动 system_prompt 破坏缓存；
+                # 旧版 AstrBot 没有该能力时再回退到原来的 system_prompt 追加。
+                parts = getattr(req, "extra_user_content_parts", None)
+                if TextPart is not None and isinstance(parts, list):
+                    part = TextPart(text=text)
+                    mark_temp = getattr(part, "mark_as_temp", None)
+                    if callable(mark_temp):
+                        mark_temp()
+                    parts.append(part)
+                else:
+                    req.system_prompt = (req.system_prompt or "") + "\n\n" + text
         except Exception as exc:  # noqa: BLE001
             self.logger.debug("[bili-scroll] 注入发送记录失败：%s", exc)
 

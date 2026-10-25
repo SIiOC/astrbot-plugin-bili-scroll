@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import time
 import urllib.parse
 import uuid
@@ -24,6 +23,8 @@ from bilibili_api import Credential, comment, homepage, hot, search, session as 
 from bilibili_api.comment import CommentResourceType
 from bilibili_api.search import SearchObjectType
 from bilibili_api.utils.network import Api
+
+from astrbot.api import logger as _LOGGER
 
 from . import logic, vision
 from .store import Store
@@ -44,7 +45,6 @@ PASSPORT_POLL = (
 FINGER_SPI = "https://api.bilibili.com/x/frontend/finger/spi"
 
 RISK_CODES = {-412, -352, -509, 412}
-_LOGGER = logging.getLogger(__name__)
 
 QR_STATE_TEXT = {
     "waiting": "等待扫码",
