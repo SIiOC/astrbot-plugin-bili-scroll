@@ -317,6 +317,11 @@
           <label>沉寂多少分钟后刷<input id="cfgProactiveIdle" type="number" min="5" max="1440" /></label>
           <label>每天最多主动分享<input id="cfgProactiveMax" type="number" min="0" max="10" /></label>
           <label>两次主动分享间隔(分)<input id="cfgProactiveGap" type="number" min="0" max="1440" /></label>
+          <label>主动分享投递<select id="cfgProactiveDelivery">
+            <option value="comment">公开评论</option>
+            <option value="dm">B站私信</option>
+            <option value="both">评论 + B站私信</option>
+          </select></label>
         </div>
         <div class="mix-editor">
           <div class="mix-head">
@@ -993,6 +998,9 @@
           if (document.activeElement !== $("cfgDmShareMode")) {
             $("cfgDmShareMode").value = c.dm_share_mode || "single";
           }
+          if (document.activeElement !== $("cfgProactiveDelivery")) {
+            $("cfgProactiveDelivery").value = c.proactive_delivery || "comment";
+          }
           applyMixValues(
             c.mix_keywords_pct === undefined ? 100 : c.mix_keywords_pct,
             c.mix_recommend_pct === undefined ? 0 : c.mix_recommend_pct,
@@ -1050,6 +1058,7 @@
             proactive_idle_minutes: Number($("cfgProactiveIdle").value || 30),
             proactive_max_per_day: Number($("cfgProactiveMax").value || 2),
             proactive_min_gap_minutes: Number($("cfgProactiveGap").value || 120),
+            proactive_delivery: $("cfgProactiveDelivery").value,
             mix_keywords_pct: mix.keywords,
             mix_recommend_pct: mix.recommend,
             mix_popular_pct: mix.popular,
@@ -1112,7 +1121,7 @@
           });
           document
             .querySelectorAll(
-              "#cfgPerDay,#cfgLlm,#cfgRounds,#cfgMaxCandidates,#cfgRunAt,#cfgMention,#cfgCommentLimit,#cfgCommentRound,#cfgCommentDaily,#cfgCommentPerUp,#cfgCommentMinScore,#cfgCommentInterval,#cfgCommentDedupe,#cfgCommentMinChars,#cfgCommentBlocklist,#cfgNoSubtitlePolicy,#cfgDmMode,#cfgDmShareMode,#cfgDmUid,#cfgDmShareLimit,#cfgDmShareDaily,#cfgDmShareInterval,#cfgVisionFrames,#cfgVisionSeconds,#cfgPreferenceWeight,#cfgPickThreshold,#cfgRiskThreshold,#cfgProactiveIdle,#cfgProactiveMax,#cfgProactiveGap,#cfgMixKeywords,#cfgMixRecommend,#cfgMixPopular,#cfgAutoRun,#cfgNlTrigger,#cfgPeak,#cfgAutoComment,#cfgPushQQ,#cfgPersona,#cfgCommentGuard,#cfgReadComments,#cfgProactiveShare"
+              "#cfgPerDay,#cfgLlm,#cfgRounds,#cfgMaxCandidates,#cfgRunAt,#cfgMention,#cfgCommentLimit,#cfgCommentRound,#cfgCommentDaily,#cfgCommentPerUp,#cfgCommentMinScore,#cfgCommentInterval,#cfgCommentDedupe,#cfgCommentMinChars,#cfgCommentBlocklist,#cfgNoSubtitlePolicy,#cfgDmMode,#cfgDmShareMode,#cfgDmUid,#cfgDmShareLimit,#cfgDmShareDaily,#cfgDmShareInterval,#cfgVisionFrames,#cfgVisionSeconds,#cfgPreferenceWeight,#cfgPickThreshold,#cfgRiskThreshold,#cfgProactiveIdle,#cfgProactiveMax,#cfgProactiveGap,#cfgProactiveDelivery,#cfgMixKeywords,#cfgMixRecommend,#cfgMixPopular,#cfgAutoRun,#cfgNlTrigger,#cfgPeak,#cfgAutoComment,#cfgPushQQ,#cfgPersona,#cfgCommentGuard,#cfgReadComments,#cfgProactiveShare"
             )
             .forEach((el) => {
               el.addEventListener("input", () => {

@@ -1131,6 +1131,43 @@ class TestProactiveShare(unittest.TestCase):
         today = datetime.now().strftime("%Y-%m-%d")
         self.assertEqual(state["proactive_shares"][today], 1)
 
+    def test_proactive_delivery_dm_skips_public_comment(self):
+        item = make_item("BV1ProDm1", "刷到个好看的")
+        plugin, client = self._plugin([item], {item["bvid"]: "字幕" * 20})
+        plugin.cfg.update(
+            {
+                "proactive_delivery": "dm",
+                "auto_comment": False,
+                "dm_uid": 186630420,
+                "dm_share_mode": "single",
+            }
+        )
+        result = asyncio.run(plugin._run_proactive())
+        self.assertEqual(result, "shared")
+        self.assertEqual(client.posted, [])
+        self.assertTrue(client.share_dms)
+        sent = plugin.store.recent_sent(days=1, limit=5)
+        self.assertEqual(sent[-1]["kind"], "dm")
+        self.assertEqual(sent[-1]["items"][0]["bvid"], item["bvid"])
+
+    def test_dm_card_unsupported_state_uses_text(self):
+        item = make_item("BV1ProDm2", "刷到个好看的")
+        plugin, client = self._plugin([item], {item["bvid"]: "字幕" * 20})
+        state = plugin.store.load_state()
+        state["dm_card_unsupported"] = True
+        plugin.store.save_state(state)
+        plugin.cfg.update(
+            {
+                "proactive_delivery": "dm",
+                "auto_comment": False,
+                "dm_uid": 186630420,
+            }
+        )
+        result = asyncio.run(plugin._run_proactive())
+        self.assertEqual(result, "shared")
+        self.assertFalse(client.share_dms)
+        self.assertTrue(client.dms)
+
     def test_recent_activity_blocks(self):
         plugin, _client = self._plugin([], {})
         state = plugin.store.load_state()

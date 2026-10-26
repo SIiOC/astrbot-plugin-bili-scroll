@@ -96,12 +96,14 @@ _STR_KEYS = {
     "proactive_quiet_start",
     "proactive_quiet_end",
     "proactive_source",
+    "proactive_delivery",
     "no_subtitle_policy",
     "vision_provider_id",
     "ffmpeg_path",
 }
 _DM_MODES = {"off", "only", "both"}
 _DM_SHARE_MODES = {"single", "digest"}
+_PROACTIVE_DELIVERIES = {"comment", "dm", "both"}
 _NO_SUBTITLE_POLICIES = {"skip", "summary", "comments", "vision"}
 
 
@@ -173,6 +175,9 @@ def apply_config_updates(plugin, payload: dict) -> dict:
                 continue
             if key == "dm_share_mode" and text not in _DM_SHARE_MODES:
                 issues.append("dm_share_mode: 只能是 single / digest")
+                continue
+            if key == "proactive_delivery" and text not in _PROACTIVE_DELIVERIES:
+                issues.append("proactive_delivery: 只能是 comment / dm / both")
                 continue
             if key == "no_subtitle_policy" and text not in _NO_SUBTITLE_POLICIES:
                 issues.append("no_subtitle_policy: 只能是 skip / summary / comments / vision")
@@ -362,6 +367,9 @@ class BiliScrollWebAPI:
             "last_sent": last_sent,
             "inject_sent_context": bool(plugin._cfg("inject_sent_context", True)),
             "proactive_share": bool(plugin._cfg("proactive_share", False)),
+            "proactive_delivery": str(
+                plugin._cfg("proactive_delivery", "comment") or "comment"
+            ),
             "proactive_idle_minutes": plugin._cfg_int("proactive_idle_minutes", 30, minimum=5),
             "proactive_max_per_day": plugin._cfg_int("proactive_max_per_day", 2),
             "proactive_min_gap_minutes": plugin._cfg_int(
@@ -504,6 +512,9 @@ class BiliScrollWebAPI:
                 "pick_threshold": plugin._cfg_int("pick_threshold", 65, minimum=0),
                 "inject_sent_context": bool(plugin._cfg("inject_sent_context", True)),
                 "proactive_share": bool(plugin._cfg("proactive_share", False)),
+                "proactive_delivery": str(
+                    plugin._cfg("proactive_delivery", "comment") or "comment"
+                ),
                 "proactive_idle_minutes": plugin._cfg_int(
                     "proactive_idle_minutes", 30, minimum=5
                 ),
@@ -645,17 +656,30 @@ class BiliScrollWebAPI:
             return {"ok": False, "accepted": False, "message": "正在跑另一轮，等它结束再试"}
         if not plugin.client.has_credential():
             return {"ok": False, "accepted": False, "message": "还没登录，先扫码"}
-        if not bool(plugin._cfg("auto_comment", False)):
+        delivery = str(
+            plugin._cfg("proactive_delivery", "comment") or "comment"
+        ).strip().lower()
+        if delivery not in _PROACTIVE_DELIVERIES:
+            delivery = "comment"
+        if delivery == "comment" and not bool(plugin._cfg("auto_comment", False)):
             return {
                 "ok": False,
                 "accepted": False,
-                "message": "公开评论总开关 auto_comment 未开；主动分享也走评论通道，开启后才会发",
+                "message": "公开评论总开关 auto_comment 未开；主动分享选 comment 时需要它，或把投递通道改为 dm",
             }
-        if not str(plugin._cfg("mention_name", "") or "").strip():
+        if delivery in {"comment", "both"} and not str(
+            plugin._cfg("mention_name", "") or ""
+        ).strip():
             return {
                 "ok": False,
                 "accepted": False,
-                "message": "先去配置里填「要 @ 的 B 站昵称」，主动分享靠评论 @ 通知",
+                "message": "公开评论需要「要 @ 的 B 站昵称」；只发 B站私信请把投递通道改为 dm",
+            }
+        if delivery in {"dm", "both"} and not plugin._cfg_int("dm_uid", 0):
+            return {
+                "ok": False,
+                "accepted": False,
+                "message": "主动分享投递到 B站私信需要填 dm_uid（B站私信接收者 UID）",
             }
         state = plugin.store.load_state()
         today = datetime.now().strftime("%Y-%m-%d")
@@ -668,10 +692,11 @@ class BiliScrollWebAPI:
                 "message": f"今天已经主动分享 {shares}/{max_day} 次了，明天再刷或调高「每天最多主动分享」",
             }
         plugin._proactive_task = asyncio.create_task(plugin._run_proactive(test=True))
+        channel = "B站私信" if delivery == "dm" else ("公开评论 + B站私信" if delivery == "both" else "公开评论")
         return {
             "ok": True,
             "accepted": True,
-            "message": "开始刷了：读几条首页推荐，挑中会在 B 站评论 @ 你（约 10–40 秒）",
+            "message": f"开始刷了：读几条首页推荐，挑中会通过{channel}分享（约 10–40 秒）",
         }
 
     # ---------------- POST /preview/comment ----------------

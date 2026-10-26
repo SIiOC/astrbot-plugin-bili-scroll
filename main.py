@@ -307,10 +307,13 @@ class BiliScrollPlugin(Star):
             return "busy"
         if not test and not bool(self._cfg("proactive_share", False)):
             return "disabled"
-        if not bool(self._cfg("auto_comment", False)):
+        delivery = str(self._cfg("proactive_delivery", "comment") or "comment").strip().lower()
+        if delivery not in {"comment", "dm", "both"}:
+            delivery = "comment"
+        if not bool(self._cfg("auto_comment", False)) and delivery == "comment":
             return "comments_disabled"
         mention = str(self._cfg("mention_name", "") or "").strip()
-        if not mention:
+        if not mention and delivery == "comment":
             return "no_mention"
         if not self._umo:
             return "no_session"
@@ -446,15 +449,49 @@ class BiliScrollPlugin(Star):
                     seen_entries.append((detail["bvid"], today, "跳过（判断不值得）"))
                     continue
                 candidate = {**detail, **verdict, "visual": visual}
-                status, _result = await self._post_guarded_comment(self._umo, candidate, share=True)
-                if status != "posted":
-                    self.logger.info("[bili-scroll] 主动评论未发：%s (%s)", detail["bvid"], status)
-                    if status in {"disabled", "state_error", "post_failed", "cooldown", "daily_limit", "interval", "legacy_history_unattributed"}:
+                dm_sent = False
+                if delivery in {"dm", "both"}:
+                    receiver = self._cfg_int("dm_uid", 0)
+                    if not receiver:
+                        self.logger.warning("[bili-scroll] 主动分享需要 dm_uid，未配置 B站私信接收者")
+                        if delivery == "dm":
+                            continue
+                    else:
+                        try:
+                            dm_sent = bool(await self._send_dm_single([candidate])) > 0
+                        except Exception as exc:  # noqa: BLE001
+                            self.logger.warning("[bili-scroll] 主动分享 B站私信失败：%s", exc)
+                comment_status = ""
+                if delivery in {"comment", "both"}:
+                    comment_status, _result = await self._post_guarded_comment(
+                        self._umo, candidate, share=True
+                    )
+                    if comment_status != "posted":
+                        self.logger.info(
+                            "[bili-scroll] 主动评论未发：%s (%s)",
+                            detail["bvid"],
+                            comment_status,
+                        )
+                if not dm_sent and comment_status != "posted":
+                    if comment_status in {
+                        "disabled",
+                        "state_error",
+                        "post_failed",
+                        "cooldown",
+                        "daily_limit",
+                        "interval",
+                        "legacy_history_unattributed",
+                    }:
                         break
                     continue
                 picked.append(candidate)
                 seen_entries.append((detail["bvid"], today, "主动分享"))
-                self.logger.info("[bili-scroll] 主动分享：%s《%s》", detail["bvid"], detail.get("title", ""))
+                self.logger.info(
+                    "[bili-scroll] 主动分享：%s《%s》通道=%s",
+                    detail["bvid"],
+                    detail.get("title", ""),
+                    "dm" if dm_sent else "comment",
+                )
                 break
 
             if seen_entries:
@@ -1742,7 +1779,9 @@ class BiliScrollPlugin(Star):
                     self.logger.debug("[bili-scroll] 分享卡片补详情失败（%s）：%s", bvid, exc)
 
             share_kind = "card"
-            card_unsupported = bool(getattr(self, "_dm_card_unsupported", False))
+            card_unsupported = bool(getattr(self, "_dm_card_unsupported", False)) or bool(
+                state.get("dm_card_unsupported")
+            )
             if not card_unsupported:
                 try:
                     await self.client.send_share_dm(card_item, receiver_uid=receiver)
@@ -1751,6 +1790,8 @@ class BiliScrollPlugin(Star):
                     # 记住一次，后续直接走文字，避免每条都发一次无效写请求。
                     self._dm_card_unsupported = True
                     card_unsupported = True
+                    state["dm_card_unsupported"] = True
+                    self.store.save_state(state)
                     self.logger.info(
                         "[bili-scroll] 分享卡片发送失败（%s），后续改发文字：%s",
                         bvid,

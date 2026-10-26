@@ -27,7 +27,18 @@
     "description": "会话沉寂时自己刷并分享",
     "type": "bool",
     "default": false,
-    "hint": "打开后，主人在登记的推送会话里安静超过「沉寂分钟数」，bot 会像自己刷首页一样看几条视频，挑中就以 B 站评论 @ 主人分享（不额外发 QQ 日报）。需要填「要 @ 的 B 站昵称」，且写操作有风险，建议先用页面「主动刷一条」试。"
+    "hint": "打开后，主人在登记的推送会话里安静超过「沉寂分钟数」，bot 会像自己刷首页一样看几条视频；投递通道由「主动分享投递」决定。需要填「要 @ 的 B 站昵称」或 B站私信 UID，且写操作有风险，建议先用页面「主动刷一条」试。"
+  },
+  "proactive_delivery": {
+    "description": "主动分享投递通道",
+    "type": "string",
+    "options": [
+      "comment",
+      "dm",
+      "both"
+    ],
+    "default": "comment",
+    "hint": "comment=公开评论 @ 主人（默认，需 auto_comment=true 和 mention_name）；dm=只发 B站私信（需 dm_uid）；both=先发 B站私信，再尝试公开评论。公开评论仍受防滥用限制。"
   },
   "proactive_idle_minutes": {
     "description": "会话沉寂多少分钟后才刷",

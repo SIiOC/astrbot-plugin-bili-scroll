@@ -13,7 +13,7 @@ AstrBot 插件：按关键词搜 B 站近几天的视频，**逐条读字幕原�
 - ✅ 可选把日报发到 B 站私信（`dm_mode` = off/only/both；默认 off；`dm_share_mode=single` 时逐条分享每条视频，优先尝试原生分享卡片，B 站 web 接口不支持时自动发自然文字 + 链接；注意 B 站禁止自投，`dm_uid` 需是另一个账号）
 - ✅ **记得自己发过什么**：日报/私信/评论都记进 `sent.jsonl`，在**主人登记的私聊会话**里注入对话上下文，bot 能回答「你给我发过什么」（陌生会话、群聊不注入）；也可 `/bili_sent` 或让 bot 调 `bili_sent_history` 工具查
 - ✅ 可选：发一条公开评论 @ 你（默认关、所有入口共用限量与安全闸门），发完复核「回执成功 ≠ 公开可见」
-- ✅ 可选（默认关）**会话沉寂时自己刷视频分享**：主人安静超过 `proactive_idle_minutes` 后，像自己刷首页一样看几条推荐（推荐流+关键词混合），挑中就以公开评论 @ 你，不额外发 QQ 日报；有每日次数、最短间隔、安静时段三重限制
+- ✅ 可选（默认关）**会话沉寂时自己刷视频分享**：主人安静超过 `proactive_idle_minutes` 后，像自己刷首页一样看几条推荐（推荐流+关键词混合），挑中后按 `proactive_delivery` 走公开评论或 B站私信；有每日次数、最短间隔、安静时段三重限制
 - ❌ 不点赞 / 不投币 / 不收藏 / 不关注 / 不发动态；B 站私信默认关闭（`dm_mode=off`），公开评论也默认关闭（`auto_comment=false`）
 - ❌ 不做浏览器自动化、不爬全站、不批量私信
 
@@ -87,13 +87,13 @@ https://github.com/SIiOC/astrbot-plugin-bili-scroll
 
 想让它更像真人：主人不聊了，它自己刷一会儿，看到有意思的就在 B 站评论 @ 你，而不是干等日报。
 
-- 触发条件（全部满足才会刷）：`proactive_share=true` 且 `auto_comment=true`、主人**登记的推送会话**安静超过 `proactive_idle_minutes`（默认 30 分钟）、不在安静时段、今天的主动分享次数未用完、距上次分享超过 `proactive_min_gap_minutes`、没有正在跑的日报轮次/风控冷却
+- 触发条件（全部满足才会刷）：`proactive_share=true`、主人**登记的推送会话**安静超过 `proactive_idle_minutes`（默认 30 分钟）、不在安静时段、今天的主动分享次数未用完、距上次分享超过 `proactive_min_gap_minutes`、没有正在跑的日报轮次/风控冷却；`proactive_delivery=comment` 还要求 `auto_comment=true` 和 `mention_name`，`dm` 只要求 `dm_uid`
 - 刷什么：`proactive_source=mixed`（默认）时取首页推荐流 + 关键词相关视频混合打乱，最多看 6 条候选；`recommend` 只刷首页推荐；`keywords` 只搜关键词
-- 分享形式：默认复用公开评论通道——用登录的小号在挑中的视频下评论 `@你主号昵称 一句分享口吻的话`，发出后复核可见性；**不额外发 QQ 消息**。它与普通评论共用总开关、日限额、同 UP 限额、质量门槛与去重规则。日报私信仍由 `dm_mode` 控制，不会因为主动分享自动开启。
+- 分享形式由 `proactive_delivery` 决定：`comment`=公开评论 @ 你（默认）；`dm`=只发 B站私信；`both`=先发 B站私信，再尝试公开评论。`dm` 不经过 `auto_comment`，但共用 `dm_uid`、`dm_share_daily_limit`、`dm_share_interval` 和当天已分享 BV 去重；公开评论仍走全部防滥用闸门。日报私信仍由 `dm_mode` 单独控制。
 - 可见性说明：B 站新号或短时间连续评论可能先进入审核，20 秒后复核可能还是 `visible=false`，稍后（几分钟到几小时）再看；正常间隔下不会连续触发
 - 硬限制：每天最多 `proactive_max_per_day` 次（默认 2）、两次至少隔 `proactive_min_gap_minutes`（默认 120 分钟）、`proactive_quiet_start`–`proactive_quiet_end`（默认 23:00–08:00）不主动发
 - 允许「刷了但没分享」：真人也会刷半天没东西可发，这一样不消耗分享次数
-- 想手动试一次：页面操作栏「刷一条（主动分享）」——忽略沉寂与安静时段，但仍受主动分享每日次数、公开评论总开关 `auto_comment` 与全部评论防滥用限制
+- 想手动试一次：页面操作栏「刷一条（主动分享）」——忽略沉寂与安静时段，但仍受主动分享每日次数和所选投递通道的限制
 
 ## 搜索结果比重
 
@@ -226,7 +226,8 @@ AstrBot WebUI →「插件 WebUI」→「刷会儿B站」（插件详情页里�
 | `nl_trigger` | true | 允许「你去刷会视频吧」这类命令式短句直接触发（仅管理员、整句短句） |
 | `run_at` | "22:00" | 自动运行时间（HH:MM） |
 | `peak_valley` | false | 只在 12:00–14:00 / 18:00–09:00 谷时窗跑 |
-| `proactive_share` | false | 会话沉寂时自己刷视频并以评论 @ 分享（需要 `mention_name`） |
+| `proactive_share` | false | 会话沉寂时自己刷视频分享 |
+| `proactive_delivery` | "comment" | comment=公开评论 / dm=只发 B站私信 / both=两者都试；dm 不要求 auto_comment |
 | `proactive_idle_minutes` | 30 | 主人会话安静多少分钟后才刷（5–1440） |
 | `proactive_max_per_day` | 2 | 每天最多主动分享几次（0–10；0 = 不限，不建议） |
 | `proactive_min_gap_minutes` | 120 | 两次主动分享最短间隔（0–1440） |

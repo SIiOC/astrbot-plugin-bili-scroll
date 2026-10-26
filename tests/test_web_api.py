@@ -429,6 +429,18 @@ class WebApiTestCase(unittest.TestCase):
         self.assertEqual(self.plugin.cfg["comment_dedupe_pct"], 0)
         self.assertEqual(self.plugin.cfg["comment_per_round"], 3)
 
+    def test_proactive_delivery_validation(self):
+        result = web_api.apply_config_updates(
+            self.plugin, {"proactive_delivery": "dm"}
+        )
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(self.plugin.cfg["proactive_delivery"], "dm")
+        bad = web_api.apply_config_updates(
+            self.plugin, {"proactive_delivery": "qq"}
+        )
+        self.assertFalse(bad["ok"])
+        self.assertIn("proactive_delivery", " ".join(bad["issues"]))
+
     def test_apply_config_updates_rejects_bad_values(self):
         bad = web_api.apply_config_updates(
             self.plugin, {"dm_mode": "nope", "dm_share_mode": "nope", "run_at": "25:99", "debug": True}
