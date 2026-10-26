@@ -173,13 +173,18 @@ class BiliScrollPlugin(Star):
         return int((state.get(name) or {}).get(today, 0))
 
     def _inc_counter(self, name: str, delta: int = 1) -> int:
-        state = self.store.load_state()
         today = datetime.now().strftime("%Y-%m-%d")
-        data = dict(state.get(name) or {})
-        data[today] = int(data.get(today, 0)) + max(0, int(delta))
-        state[name] = {key: data[key] for key in sorted(data)[-14:]}
-        self.store.save_state(state)
-        return data[today]
+        result = 0
+
+        def update(state: dict) -> None:
+            nonlocal result
+            data = dict(state.get(name) or {})
+            data[today] = int(data.get(today, 0)) + max(0, int(delta))
+            state[name] = {key: data[key] for key in sorted(data)[-14:]}
+            result = data[today]
+
+        self.store.update_state(update)
+        return result
 
     def _llm_remaining(self) -> int:
         budget = self._cfg_int("llm_budget_per_day", 200)  # 0 = 不限
@@ -497,17 +502,22 @@ class BiliScrollPlugin(Star):
             if seen_entries:
                 self.store.append_seen(seen_entries)
             if picked:
-                state = self.store.load_state()
-                share_map = dict(state.get("proactive_shares") or {})
-                share_map[today] = int(share_map.get(today, 0)) + 1
-                state["proactive_shares"] = {key: share_map[key] for key in sorted(share_map)[-14:]}
-                state["proactive_last_ts"] = now.timestamp()
-                self.store.save_state(state)
+                def save_share(state: dict) -> None:
+                    share_map = dict(state.get("proactive_shares") or {})
+                    share_map[today] = int(share_map.get(today, 0)) + 1
+                    state["proactive_shares"] = {
+                        key: share_map[key] for key in sorted(share_map)[-14:]
+                    }
+                    state["proactive_last_ts"] = now.timestamp()
+
+                self.store.update_state(save_share)
             if self.client.risk_count >= risk_threshold:
                 cooldown_minutes = max(5, self._cfg_int("risk_cooldown_minutes", 60, minimum=5))
-                state = self.store.load_state()
-                state["cooldown_until"] = now.timestamp() + cooldown_minutes * 60
-                self.store.save_state(state)
+                self.store.update_state(
+                    lambda state: state.update(
+                        {"cooldown_until": now.timestamp() + cooldown_minutes * 60}
+                    )
+                )
                 self.logger.warning("[bili-scroll] 主动刷遇到连续风控，冷却 %s 分钟", cooldown_minutes)
                 return "risk"
             return "shared" if picked else "nothing"
@@ -798,10 +808,11 @@ class BiliScrollPlugin(Star):
             if calls or risks:
                 if calls:
                     self._inc_counter("api_calls", delta=calls)
-                state = self.store.load_state()
-                state["last_round_api_calls"] = calls
-                state["last_round_risk"] = risks
-                self.store.save_state(state)
+                self.store.update_state(
+                    lambda state: state.update(
+                        {"last_round_api_calls": calls, "last_round_risk": risks}
+                    )
+                )
             cache = getattr(self, "_verdict_cache", None)
             if isinstance(cache, dict):
                 self.store.save_verdict_cache(cache)
@@ -1790,8 +1801,9 @@ class BiliScrollPlugin(Star):
                     # 记住一次，后续直接走文字，避免每条都发一次无效写请求。
                     self._dm_card_unsupported = True
                     card_unsupported = True
-                    state["dm_card_unsupported"] = True
-                    self.store.save_state(state)
+                    self.store.update_state(
+                        lambda latest: latest.update({"dm_card_unsupported": True})
+                    )
                     self.logger.info(
                         "[bili-scroll] 分享卡片发送失败（%s），后续改发文字：%s",
                         bvid,
@@ -1823,9 +1835,9 @@ class BiliScrollPlugin(Star):
                 extra={"share": share_kind},
             )
             # 每条都落盘，进程中断后下轮不会重复分享同一 BV。
-            state = self.store.load_state()
-            state["dm_shared"] = {today: shared[-50:]}
-            self.store.save_state(state)
+            self.store.update_state(
+                lambda latest: latest.update({"dm_shared": {today: shared[-50:]}})
+            )
             if idx < len(selected) - 1:
                 await asyncio.sleep(interval)
 
@@ -1875,7 +1887,8 @@ class BiliScrollPlugin(Star):
             await self.put_kv_data("umo", umo)
         except Exception as exc:  # noqa: BLE001
             self.logger.warning("[bili-scroll] KV 保存推送目标失败，改用 state.json：%s", exc)
-        state = self.store.load_state()
-        state["umo"] = umo
-        state["last_user_active_ts"] = datetime.now().timestamp()
-        self.store.save_state(state)
+        self.store.update_state(
+            lambda latest: latest.update(
+                {"umo": umo, "last_user_active_ts": datetime.now().timestamp()}
+            )
+        )

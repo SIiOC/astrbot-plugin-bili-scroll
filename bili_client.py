@@ -89,6 +89,25 @@ def _is_risk_control(exc: Exception) -> bool:
     return any(token in text for token in ("-412", "-352", "-509", "Precondition Failed"))
 
 
+def _is_transient_network_error(exc: Exception) -> bool:
+    """只读请求可重试的瞬时网络错误；不包含风控（风控另有计数与退避）。"""
+    if _is_risk_control(exc):
+        return False
+    if isinstance(exc, (asyncio.TimeoutError, OSError, aiohttp.ClientError)):
+        return True
+    text = str(exc).lower()
+    return any(
+        token in text
+        for token in (
+            "getaddrinfo failed",
+            "connection reset",
+            "connection aborted",
+            "temporary failure in name resolution",
+            "timed out",
+        )
+    )
+
+
 class BiliClient:
     """面向本插件需求的 B 站能力封装。"""
 
@@ -102,13 +121,31 @@ class BiliClient:
         # 用量与风控计数（供上层熔断/页面展示；每轮开始时由调用方重置）
         self.call_count = 0
         self.risk_count = 0
+        # 只读结果短缓存：同一进程内重复轮次不再重复打 B站接口。
+        self._read_cache: dict[str, tuple[float, object]] = {}
+
+    def _cache_get(self, key: str, ttl: float):
+        hit = self._read_cache.get(key)
+        if not hit:
+            return None
+        saved_at, value = hit
+        if time.time() - saved_at > ttl:
+            self._read_cache.pop(key, None)
+            return None
+        return value
+
+    def _cache_set(self, key: str, value) -> None:
+        self._read_cache[key] = (time.time(), value)
+        if len(self._read_cache) > 2000:
+            oldest = min(self._read_cache, key=lambda k: self._read_cache[k][0])
+            self._read_cache.pop(oldest, None)
 
     def _bump(self) -> None:
         self.call_count += 1
 
     # ---------------- 通用：只读请求退避 ----------------
     async def _read_with_backoff(self, factory, *, attempts: int = 3, base_delay: float = 5.0):
-        """只读请求：风控类错误指数退避重试，其它错误直接抛出。"""
+        """只读请求：风控/瞬时网络错误指数退避重试；业务错误直接抛出。"""
         last_exc: Exception | None = None
         for attempt in range(attempts):
             self._bump()
@@ -118,11 +155,24 @@ class BiliClient:
                 raise
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
-                if _is_risk_control(exc):
+                risk = _is_risk_control(exc)
+                transient = _is_transient_network_error(exc)
+                if risk:
                     self.risk_count += 1
-                if attempt + 1 < attempts and _is_risk_control(exc):
-                    delay = base_delay * (attempt + 1)
-                    _LOGGER.warning("B 站风控，%.0f 秒后重试（%s）：%s", delay, attempt + 1, exc)
+                if attempt + 1 < attempts and (risk or transient):
+                    delay = (
+                        base_delay * (attempt + 1)
+                        if risk
+                        else min(1.5, base_delay) * (attempt + 1)
+                    )
+                    kind = "风控" if risk else "网络"
+                    _LOGGER.warning(
+                        "B 站%s错误，%.1f 秒后重试（%s）：%s",
+                        kind,
+                        delay,
+                        attempt + 1,
+                        exc,
+                    )
                     await asyncio.sleep(delay)
                     continue
                 raise
@@ -422,6 +472,10 @@ class BiliClient:
         return logic.dedupe_by_bvid(items)[: max(1, min(50, int(limit or 20)))]
 
     async def video_detail(self, item: dict) -> dict:
+        cache_key = f"detail:{item.get('bvid', '')}"
+        cached = self._cache_get(cache_key, 900)
+        if isinstance(cached, dict):
+            return dict(cached)
         vid = video.Video(bvid=item["bvid"], credential=self.credential)
         try:
             info = await self._read_with_backoff(lambda: vid.get_info())
@@ -445,6 +499,7 @@ class BiliClient:
         detail["duration"] = int(info.get("duration") or item.get("duration") or 0)
         detail["pubdate"] = int(info.get("pubdate") or item.get("pubdate") or 0)
         detail["play"] = int(((info.get("stat") or {}).get("view")) or item.get("play") or 0)
+        self._cache_set(cache_key, detail)
         return detail
 
     # ---------------- 字幕 ----------------
@@ -454,6 +509,10 @@ class BiliClient:
             raise NotLoggedInError("读取字幕需要登录态")
         if not item.get("cid"):
             return ""
+        cache_key = f"subtitle:{item['bvid']}:{item['cid']}"
+        cached = self._cache_get(cache_key, 3600)
+        if isinstance(cached, str):
+            return cached
         vid = video.Video(bvid=item["bvid"], credential=cred)
         try:
             info = await self._read_with_backoff(
@@ -478,7 +537,9 @@ class BiliClient:
                     body = await resp.json(content_type=None)
         except Exception as exc:  # noqa: BLE001
             raise BiliError(f"下载字幕失败（{item['bvid']}）：{exc}") from exc
-        return logic.subtitle_text_from_body(body)
+        text = logic.subtitle_text_from_body(body)
+        self._cache_set(cache_key, text)
+        return text
 
     # ---------------- 无字幕兜底：官方摘要 / 抽帧 ----------------
     async def ai_summary(self, item: dict) -> str:

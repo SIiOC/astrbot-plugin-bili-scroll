@@ -63,6 +63,30 @@ class StoreTestCase(unittest.TestCase):
         text = self.store.seen_text()
         self.assertEqual(text.count("- BV"), 3)
 
+    def test_update_state_merges_latest_fields(self):
+        self.store.save_state({"llm_calls": {"2026-10-26": 2}, "keep": "x"})
+        self.store.update_state(lambda state: state.update({"last_round_api_calls": 7}))
+        state = self.store.load_state()
+        self.assertEqual(state["llm_calls"]["2026-10-26"], 2)
+        self.assertEqual(state["last_round_api_calls"], 7)
+        self.assertEqual(state["keep"], "x")
+
+    def test_append_sent_keeps_jsonl_append_only(self):
+        today = datetime.now().strftime("%Y-%m-%d")
+        for index in range(3):
+            self.store.append_sent(
+                {
+                    "date": today,
+                    "kind": "dm",
+                    "items": [{"bvid": f"BV{index}"}],
+                }
+            )
+        text = self.store.sent_file.read_text(encoding="utf-8")
+        self.assertEqual(len(text.strip().splitlines()), 3)
+        recent = self.store.recent_sent(days=1, limit=2)
+        self.assertEqual(len(recent), 2)
+        self.assertEqual(recent[-1]["items"][0]["bvid"], "BV2")
+
     def test_report_write_and_append(self):
         self.store.write_report("2026-10-20", "# 第一轮\n### BV1NXH661EpG\n")
         self.store.append_report("2026-10-20", "## 追加一轮\n### BV1VkgK6NEZS\n")

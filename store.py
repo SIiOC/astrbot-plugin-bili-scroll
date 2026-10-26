@@ -109,6 +109,15 @@ class Store:
             raise ValueError("运行状态读取失败，禁止覆盖；请修复状态文件后重新读取")
         self._write_json(self.state_file, state)
 
+    def update_state(self, mutator) -> dict:
+        """在同一份最新状态上做小改动再落盘，避免旧快照覆盖其它字段。"""
+        state = self.load_state(strict=True)
+        result = mutator(state)
+        if isinstance(result, dict):
+            state = result
+        self.save_state(state)
+        return state
+
     # ---------- 判重表 ----------
     def seen_text(self) -> str:
         try:
@@ -151,16 +160,24 @@ class Store:
 
     # ---------- 已发送记录（给 bot 回忆用） ----------
     def append_sent(self, entry: dict) -> None:
-        """追加发送记录并保留最近 5000 条（JSONL，一行一条）。"""
+        """追加发送记录；平时只 append，积到一定量再原子裁剪到最近 5000 条。"""
         if not isinstance(entry, dict) or not entry:
             return
         line = json.dumps(entry, ensure_ascii=False)
         try:
+            self.sent_file.parent.mkdir(parents=True, exist_ok=True)
+            with self.sent_file.open("a", encoding="utf-8", newline="\n") as handle:
+                handle.write(line + "\n")
+            self._sent_appends = getattr(self, "_sent_appends", 0) + 1
+            if self._sent_appends % 100 != 0:
+                return
             existing = self.sent_file.read_text(encoding="utf-8")
+            lines = existing.rstrip("\n").splitlines()
+            if len(lines) <= 5000:
+                return
+            self._write_text_atomic(self.sent_file, "\n".join(lines[-5000:]) + "\n")
         except OSError:
-            existing = ""
-        lines = (existing.rstrip("\n").splitlines() if existing else []) + [line]
-        self._write_text_atomic(self.sent_file, "\n".join(lines[-5000:]) + "\n")
+            return
 
     def recent_sent(self, days: int = 7, limit: int = 50) -> list[dict]:
         """按天过滤最近发送记录（新的在后，取最后 limit 条）。"""

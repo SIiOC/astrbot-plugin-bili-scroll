@@ -70,6 +70,49 @@ class TestCookieParsing(unittest.TestCase):
             self.assertIn(state, QR_STATE_TEXT)
 
 
+class TestReadRetryAndCache(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.store = Store(Path(self._tmp.name) / "data")
+        self.client = BiliClient(self.store)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_transient_dns_error_is_retried(self):
+        calls = {"n": 0}
+
+        async def factory():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("getaddrinfo failed")
+            return "ok"
+
+        result = asyncio.run(
+            self.client._read_with_backoff(factory, attempts=2, base_delay=0.001)
+        )
+        self.assertEqual(result, "ok")
+        self.assertEqual(calls["n"], 2)
+
+    def test_http_400_is_not_retried(self):
+        calls = {"n": 0}
+
+        async def factory():
+            calls["n"] += 1
+            raise RuntimeError("bad request")
+
+        with self.assertRaises(RuntimeError):
+            asyncio.run(
+                self.client._read_with_backoff(factory, attempts=3, base_delay=0.001)
+            )
+        self.assertEqual(calls["n"], 1)
+
+    def test_read_cache_ttl(self):
+        self.client._cache_set("k", "v")
+        self.assertEqual(self.client._cache_get("k", 60), "v")
+        self.assertIsNone(self.client._cache_get("k", -1))
+
+
 class TestCredentialLoading(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
